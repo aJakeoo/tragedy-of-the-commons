@@ -106,10 +106,43 @@ Ran the app against the live Firestore project via a local static server
    about the same box). Not something to fix in app code; the loading-state
    fix in #2 is the mitigation.
 
-**Still to do before this phase is "clean":** re-verify the round-2→3
-transition for the three buttons fixed in item 3 (fix was applied but not
-yet re-tested in-browser), then a final full pass with no fixes needed.
+### QA — closed out
+
+Re-tested the fix for item 3 by reloading both tabs and playing through
+rounds 2 and 3 back to back with no reload in between (the exact scenario
+the earlier fix targeted). Confirmed on round 3:
+- "Close submissions & compile" rendered fresh and enabled (not stuck on
+  "Compiling..." from round 2's click)
+- "Start voting" rendered fresh and enabled
+- "Reveal results" rendered fresh and enabled
+- Timer, link slots, and submission counts all reset correctly a second time
+
+Also reconfirmed the reveal math on round 2's single-entry case (0 votes
+possible since the only contributor was also the only other player, correctly
+showing 0 pts) and that both host and guest tabs stayed in sync into round 3
+in real time.
+
+No further issues found on this pass. QA phase is clean.
+
+**Intentionally deferred (not bugs, scope calls):**
+- Score persistence across rounds — stubbed behind `PERSIST_SCORES_ACROSS_ROUNDS`
+  in `config.js`, off by default, per the brief's "flag your choice" ask.
+- Instagram Reels liveness verification and thumbnails — not possible
+  client-side without a Meta Graph API token (see platform constraints
+  above); format validation is the ceiling for Instagram links in this build.
+- A "back to submission" escape hatch if a host closes submissions with zero
+  entries — the presenter view handles this gracefully (shows "No clips were
+  submitted this round" and disables "Start voting") but there's no path
+  back to re-open submissions for that round. Edge case that shouldn't come
+  up in normal play; flagging rather than building an unused control.
 
 Firebase config in `js/firebase.js` is filled in with the real
 `tragedy-of-the-commons-4e239` project values (not a placeholder) — this was
 tested against the live database, not the emulator.
+
+### Commits
+- `4726977` — initial build, pushed to `main` on
+  `https://github.com/aJakeoo/tragedy-of-the-commons.git` before QA closeout
+  (per an ASAP request mid-session) — includes the thumbnail-height fix and
+  the loading-state fix, but predates the round-2/3 re-verification above.
+- Follow-up commit with this QA closeout note pushed immediately after.
