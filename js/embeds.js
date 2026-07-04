@@ -12,34 +12,53 @@
 // iframes (tiktok.com / instagram.com), and neither platform publishes a
 // postMessage control API for third-party embeds (unlike, say, YouTube's
 // IFrame API) — there is no `iframe.contentWindow.pause()` available here.
-// The workaround used below is the standard trick for cross-origin iframes
-// with no control API: the browser fires `window.blur` when focus moves
-// into an iframe (even though click/play events *inside* the iframe are
-// invisible to the parent page), so a blur handler that checks
-// `document.activeElement` can detect "the user just tapped into this
-// specific iframe." When that happens, every *other* known clip iframe is
-// force-stopped by resetting its `src` to itself — reloading an iframe
-// discards whatever was playing, which is the closest available substitute
-// for a real pause() call. This is a heuristic, not a guarantee (e.g. tabbing
-// into an iframe via keyboard without starting playback would still reset
-// the others), but it fails safe: resetting an iframe that wasn't actually
-// playing has no visible downside.
+//
+// The first approach tried here was resetting `iframe.src = iframe.src` to
+// force a reload on every OTHER playing clip when a new one gets focus.
+// That turned out to actively break TikTok's embed: once reloaded in place,
+// the iframe never recovered (confirmed in testing — it stayed on a blank
+// loading state indefinitely, well past the ~10-15s TikTok's embeds
+// normally take to render). What DOES reliably work — because it's exactly
+// what happens on first render — is tearing the card's embed container back
+// down to the original <blockquote> markup and letting the platform's embed
+// script build a fresh iframe from scratch, the same path used the first
+// time each clip renders. That's what `stopAllExcept` below does. It costs
+// the same ~10-15s re-render delay as any TikTok/Instagram embed's first
+// load, on every card that gets stopped this way — a real, visible cost,
+// but the alternative (the src-reset trick) left clips permanently dead,
+// which is worse.
 
-const knownIframes = new Set();
-let activeIframe = null;
+const cardInfo = new Map(); // embedContainer -> { platform, embedHtml, url }
+let activeContainer = null;
 let focusListenerBound = false;
 
-function stopOtherIframes(justActivated) {
-  activeIframe = justActivated;
-  for (const iframe of knownIframes) {
-    if (iframe === justActivated) continue;
-    if (!iframe.isConnected) {
-      knownIframes.delete(iframe);
-      continue;
-    }
-    // eslint-disable-next-line no-self-assign
-    iframe.src = iframe.src; // reload = force-stop whatever was playing
+function rebuildContainer(container) {
+  const info = cardInfo.get(container);
+  if (!info) return;
+  container.innerHTML = '';
+  if (info.platform === 'tiktok' && info.embedHtml) {
+    container.appendChild(buildTikTokBlockquote(info.embedHtml));
+  } else {
+    container.appendChild(buildInstagramBlockquote(info.url));
   }
+}
+
+function stopAllExcept(activeIframe) {
+  const nextActiveContainer = activeIframe.closest('.presenter-embed');
+  if (!nextActiveContainer) return;
+  activeContainer = nextActiveContainer;
+
+  let anyTikTokRebuilt = false;
+  let anyInstagramRebuilt = false;
+  for (const [container, info] of cardInfo) {
+    if (container === nextActiveContainer) continue;
+    if (!container.querySelector('iframe')) continue; // nothing rendered there to stop
+    rebuildContainer(container);
+    if (info.platform === 'tiktok' && info.embedHtml) anyTikTokRebuilt = true;
+    else anyInstagramRebuilt = true;
+  }
+  if (anyTikTokRebuilt) loadTikTokEmbedScript();
+  if (anyInstagramRebuilt) processInstagramEmbeds();
 }
 
 function ensureFocusListener() {
@@ -49,37 +68,27 @@ function ensureFocusListener() {
     // The newly focused element isn't set until after blur fires.
     setTimeout(() => {
       const active = document.activeElement;
-      if (active?.tagName === 'IFRAME' && knownIframes.has(active) && active !== activeIframe) {
-        stopOtherIframes(active);
+      if (active?.tagName !== 'IFRAME') return;
+      const container = active.closest('.presenter-embed');
+      if (container && cardInfo.has(container) && container !== activeContainer) {
+        stopAllExcept(active);
       }
     }, 0);
   });
 }
 
+// Call once per card when the grid is (re)built, so this module knows how
+// to rebuild that card's embed from scratch if another card takes over.
+export function registerEmbedCard(container, info) {
+  ensureFocusListener();
+  cardInfo.set(container, info);
+}
+
 // Call once per grid render (after clearing the grid) so stale references
 // from a previous round/render don't linger.
 export function resetKnownEmbeds() {
-  knownIframes.clear();
-  activeIframe = null;
-}
-
-// Watches a container for iframes appearing inside it (TikTok/Instagram's
-// embed scripts create them asynchronously after processing blockquotes)
-// and feeds them into the single-active-audio enforcement above.
-export function watchForEmbedIframes(container) {
-  ensureFocusListener();
-  container.querySelectorAll('iframe').forEach(f => knownIframes.add(f));
-  const observer = new MutationObserver(mutations => {
-    for (const m of mutations) {
-      m.addedNodes.forEach(node => {
-        if (node.nodeType !== 1) return;
-        if (node.tagName === 'IFRAME') knownIframes.add(node);
-        node.querySelectorAll?.('iframe').forEach(f => knownIframes.add(f));
-      });
-    }
-  });
-  observer.observe(container, { childList: true, subtree: true });
-  return observer;
+  cardInfo.clear();
+  activeContainer = null;
 }
 
 let tiktokScriptTag = null;
@@ -90,8 +99,9 @@ let tiktokScriptTag = null;
 // runs (not just one), so rendering every clip's blockquote up front and
 // loading the script once processes the whole grid in one pass. It only
 // scans once at load though, with no documented "reprocess" call — the
-// standard trick for re-scanning after the DOM changes (e.g. a new round) is
-// to swap in a fresh <script> element, which the browser re-runs from cache.
+// standard trick for re-scanning after the DOM changes (e.g. a rebuilt card,
+// or a new round) is to swap in a fresh <script> element, which the browser
+// re-runs from cache.
 export function loadTikTokEmbedScript() {
   if (tiktokScriptTag) tiktokScriptTag.remove();
   tiktokScriptTag = document.createElement('script');

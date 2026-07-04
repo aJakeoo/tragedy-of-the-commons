@@ -253,3 +253,109 @@ still required.
 confirmed the presenter card renders the real interactive TikTok embed
 (caption, like/comment counts, tap-to-play) instead of a static thumbnail,
 and that toggling the attribution checkbox doesn't reset it.
+
+## Session 4 — All clips at once, single-audio enforcement, per-voter reveal breakdown
+
+Design (Roman marble / light-theme art direction) was handled separately via
+a Claude Design import provided directly in-session — this session was
+functional-only, no styling beyond what the behavior below required.
+
+### What changed
+
+1. **Presenter view now shows every round submission at once**, in a
+   responsive grid (`js/presenter.js`, `#presenter-grid` in `game.html`),
+   instead of one clip at a time behind prev/next navigation. This turned
+   out to be genuinely avoidable, not a fallback — TikTok/Instagram's embed
+   scripts handle a page with several blockquotes fine (see latency note
+   below), so there was no technical reason to keep pagination. Removed
+   `presentIndex` entirely from the room schema (`js/firebase.js`) since
+   nothing tracks "current clip" anymore — every player, host or guest, sees
+   the same static grid and can tap into any card independently.
+
+2. **Single tap plays with sound** — this is each platform's own default
+   embed behavior (TikTok and Instagram's tap-to-play widgets don't have a
+   separate mute step), not something built here. Confirmed no code path
+   adds an extra tap/confirmation on top of it.
+
+3. **Only one clip plays at a time — this took two attempts.** Both embeds
+   render as cross-origin iframes with no postMessage control API from
+   either platform (unlike YouTube's IFrame API), so there's no real
+   `pause()` available.
+   - **First attempt:** on focus moving into a new clip's iframe (detected
+     via the standard `window.blur` + `document.activeElement` trick, since
+     click events *inside* a cross-origin iframe are otherwise invisible to
+     the parent page), reset every other known iframe's `src` to itself to
+     force a reload. **This broke TikTok's embed permanently** — tested by
+     waiting 24+ seconds after triggering it, and the reloaded iframe never
+     recovered from a blank loading state. Confirmed reproducible, not a
+     one-off.
+   - **Fix:** instead of reloading the iframe in place, tearing the card's
+     embed container back down to the original `<blockquote>` and letting
+     the platform's embed script rebuild it from scratch — exactly the same
+     path used on first render, which is known to work. Verified this
+     recovers reliably (tapped clip A, tapped clip B, watched clip A's card
+     reset to its unplayed thumbnail state, waited ~15s, confirmed it became
+     tappable again — repeatable across multiple rounds).
+   - **Real, honest cost:** rebuilding takes the same ~10-18 seconds TikTok's
+     embed widget takes on any first render (confirmed by timing several
+     loads — this is inherent platform latency, not something introduced
+     here). Stopping a clip this way means it's genuinely unplayable again
+     for that window, not instantly ready. There's no way around this
+     without a platform-provided control API, which doesn't exist for either
+     TikTok or Instagram's public embeds.
+   - **Also observed, not a bug:** on a page with 4 simultaneous TikTok
+     blockquotes, some render within ~2-3 seconds and others take up to
+     ~15 seconds — order didn't consistently match DOM order across runs.
+     Read this as TikTok's own embed pipeline being slow/uneven under load
+     rather than anything wrong in this app; a round with a very large
+     number of distinct clips could feel sluggish to fully render, but
+     typical round sizes (a handful of players × up to 3 links, minus
+     duplicates) stayed well within tolerable wait times in testing.
+
+4. **Reveal per-voter breakdown** (`js/scoring.js`, `js/reveal.js`):
+   `tallyResults` now returns `voterBreakdown` per entry (each voter's raw
+   point contribution, sorted highest first). The reveal animation shows
+   each row's total build up from these ("Tommy +4" fades in, points ticks
+   up, then "Randy +2", then the final weighted total with a `×N weight`
+   note if the entry was a merge) instead of the row's total just appearing
+   as an abstract number. Voter identity is always shown here — deliberately
+   not gated by the presenter phase's submitter-attribution toggle, which is
+   a separate concern (who *submitted* a clip, hideable) from who *voted*
+   for it (always public at reveal, per the brief).
+
+### QA
+
+Ran two players (host + guest) through a full round locally with 4 distinct
+TikTok clips (2 submitted by each player, using real video IDs pulled live
+from TikTok to get variety beyond the one link reused in earlier sessions).
+
+**Confirmed working:**
+- All 4 clips rendered in the grid with no pagination control
+- Tap-to-play-with-sound on TikTok's embed (single tap, no separate unmute
+  step)
+- Stopping one clip to play another correctly resets the first (verified via
+  `document.activeElement` before/after, and via the visible card reset)
+  and it recovers into a re-playable state after the platform's normal load
+  time — no permanent breakage after the fix in item 3 above
+- Reveal: exact math verified by hand (Jake gave 2 and 4 points to Riley's
+  two clips, Riley gave 3 and 3 to Jake's two clips; final ranking and
+  per-voter lines matched exactly, winner correctly highlighted)
+- Round loop: round 1 → round 2 transitioned cleanly with no bounce
+  (building on the Session 2 fix), grid reset correctly for the new round
+
+**Not a new bug, re-confirms an existing documented limitation:** while
+speed-running round 2 in testing, triggered "submit links" and "close
+submissions" back to back with no gap, and the close fired before the
+submission's write had round-tripped through the room listener — round 2
+compiled with zero entries. This is the same "no escape hatch for a
+zero-entry round" limitation flagged in Session 1's output, not something
+new. A real host clicking two separate buttons will always have more than
+0ms between clicks, so this is very unlikely to bite in normal play, but
+worth being aware of if a host ever double-taps through the submission flow
+unusually fast.
+
+**Intentionally out of scope this session:** did not add any mitigation for
+the TikTok embed rendering latency (2-15s per clip) beyond documenting it —
+there's no loading indicator on individual grid cards distinguishing "still
+processing" from "processed, never played." Could add a lightweight skeleton
+state if this becomes an issue with larger rounds in practice.

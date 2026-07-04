@@ -5,7 +5,7 @@ import {
   buildInstagramBlockquote,
   loadTikTokEmbedScript,
   processInstagramEmbeds,
-  watchForEmbedIframes,
+  registerEmbedCard,
   resetKnownEmbeds,
 } from './embeds.js';
 
@@ -13,7 +13,6 @@ let bound = false;
 let startingVoting = false;
 let presenterRound = null;
 let renderedEntryIds = null; // sorted, joined — identifies the current grid's contents
-let gridObserver = null;
 
 function buildCard(entryId, entry) {
   const card = document.createElement('div');
@@ -28,6 +27,12 @@ function buildCard(entryId, entry) {
   const embedContainer = document.createElement('div');
   embedContainer.className = 'presenter-embed';
   card.appendChild(embedContainer);
+
+  registerEmbedCard(embedContainer, {
+    platform: entry.platform,
+    embedHtml: entry.embedHtml,
+    url: entry.url,
+  });
 
   let hasTikTokEmbed = false;
   if (entry.platform === 'tiktok' && entry.embedHtml) {
@@ -77,7 +82,6 @@ function renderContributors(card, entry, revealAttribution) {
 function renderGrid(entries) {
   const grid = document.getElementById('presenter-grid');
   grid.innerHTML = '';
-  if (gridObserver) gridObserver.disconnect();
   resetKnownEmbeds();
 
   if (entries.length === 0) {
@@ -92,7 +96,6 @@ function renderGrid(entries) {
     grid.appendChild(card);
   }
 
-  gridObserver = watchForEmbedIframes(grid);
   // One script load processes every TikTok blockquote currently in the grid;
   // likewise one process() call picks up every Instagram blockquote.
   if (anyTikTok) loadTikTokEmbedScript();
