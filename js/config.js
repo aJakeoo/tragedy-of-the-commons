@@ -16,6 +16,13 @@ export const MERGE_VOTE_MULTIPLIER_PER_CONTRIBUTOR = 1; // weighted points = raw
 // since the spec treats each round as self-contained.
 export const PERSIST_SCORES_ACROSS_ROUNDS = false;
 
+// How long to wait on a Firestore write before giving up and surfacing an
+// error instead of leaving a button stuck on "Loading..." forever. Firestore
+// writes have been observed to intermittently hang with no thrown error on
+// some networks (see output.md) — this bounds that wait so the UI can always
+// recover to a retryable state.
+export const FIRESTORE_WRITE_TIMEOUT_MS = 12000;
+
 export const ROOM_CODE_LENGTH = 4;
 export const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I ambiguity
 

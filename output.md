@@ -146,3 +146,68 @@ tested against the live database, not the emulator.
   (per an ASAP request mid-session) — includes the thumbnail-height fix and
   the loading-state fix, but predates the round-2/3 re-verification above.
 - Follow-up commit with this QA closeout note pushed immediately after.
+
+## Session 2 — Live bug report: "Start game" did nothing
+
+User reported the deployed app (GitHub Pages, `ajakeoo.github.io/tragedy-of-the-commons/`,
+tested on iOS Safari) hung on the lobby screen — clicking "Start game" had
+no visible effect and never advanced.
+
+**Investigation:** Reproduced directly against the live Firestore project.
+Ruled out the deploy itself (GitHub Pages was serving current code, no console
+errors) and ruled out Firestore being generally broken (isolated writes to
+throwaway documents consistently succeeded in 120–450ms). The actual bug:
+Firestore applies a write to its **local cache optimistically**, before the
+network round trip to the server completes — `subscribeToRoom`'s listener on
+the lobby page was reacting to that same-client optimistic update and firing
+a full `window.location.href = 'game.html'` navigation immediately. That
+navigation tears down the page's JS context — including the still-in-flight
+outbound write request — before it ever reached Firestore's servers. Net
+effect: the button appeared to do something (disabled, "Starting..."), the
+page navigated to game.html, game.html found `status` still `'lobby'` and
+bounced back to lobby.html, and the room's actual `status` field in the
+database never changed at all. No error ever surfaced because nothing
+technically threw — the write's promise was simply abandoned mid-flight by
+the navigation. Confirmed by calling `firebase.js`'s exported functions
+directly (bypassing all UI) — they succeeded reliably in ~300ms every time,
+proving the data layer itself was never the problem.
+
+**Fixes:**
+1. **`js/lobby.js`** — the host now navigates to `game.html` directly off the
+   resolved `startRound()` promise (which only resolves after server
+   acknowledgment), instead of waiting for its own listener to react to the
+   optimistic local update. Guests still navigate via the listener, which is
+   correct for them — they're reacting to someone *else's* write, not racing
+   their own.
+2. **`js/firebase.js`** — collapsed the data model from a fan-out of up to six
+   Firestore documents/collections per room (room, players, round,
+   playerSubmissions, submissions, ballots) into a single `rooms/{code}`
+   document with nested map fields, cutting `subscribeToRoom` from up to six
+   concurrent `onSnapshot` listeners down to one. This wasn't the root cause
+   of the bug above, but it's a genuine reliability and simplicity win
+   (fewer concurrent long-polling connections per client) discovered while
+   investigating, and required no changes to any phase module — they all
+   already consumed `room.players` / `room.rounds[n].*` in exactly this
+   shape.
+3. **`js/firebase.js`, `js/config.js`** — every Firestore call is now wrapped
+   in a 12-second timeout (`FIRESTORE_WRITE_TIMEOUT_MS`) that rejects with a
+   catchable `TIMED_OUT` error instead of letting a call hang forever with no
+   feedback. Every host action button (`landing.js`, `lobby.js`,
+   `submission.js`, `presenter.js`, `voting.js`, `reveal.js`) now has a
+   try/catch around its write: on failure the button re-enables with its
+   original label and a visible error message appears (new shared
+   `js/uiError.js` for the four `game.html` phases), instead of staying
+   stuck on a loading label with no way to retry. This doesn't fix a root
+   cause by itself, but it means a genuinely flaky network no longer produces
+   a silent, unrecoverable dead end.
+4. **`js/game.js`** — added a 2-second grace period before bouncing back to
+   `lobby.html` on seeing `status === 'lobby'`, in case a freshly-loaded
+   page's first snapshot ever lags behind a just-confirmed write from
+   elsewhere. Defensive; not the fix for the bug above, but cheap insurance
+   against the same class of read-after-write race in other directions.
+
+**Verified:** created a fresh room, started it, and confirmed via a direct
+Firestore REST read (bypassing the app entirely) that `status` flipped to
+`submitting` and `round` to `1` — the actual bug condition (write silently
+never landing) is gone. No page bounce, no stuck button, single clean
+navigation to `game.html`.

@@ -2,6 +2,7 @@ import { validateAndResolveLink } from './linkValidation.js';
 import { submitPlayerLinks, closeSubmissionsAndCompile } from './firebase.js';
 import { mergeSubmissions } from './scoring.js';
 import { MAX_LINKS_PER_PLAYER, SUBMISSION_TIMER_SECONDS } from './config.js';
+import { showPhaseError } from './uiError.js';
 
 let slotState = []; // [{ url, status: 'empty'|'checking'|'ok'|'bad', result, error }]
 let timerInterval = null;
@@ -145,18 +146,28 @@ export function render(room, ctx) {
         author: s.result.author,
       }));
       if (validLinks.length === 0) return;
-      await submitPlayerLinks(ctx.code, room.round, ctx.playerId, ctx.playerName, validLinks);
-      document.getElementById('submitted-note').classList.remove('hidden');
+      try {
+        await submitPlayerLinks(ctx.code, room.round, ctx.playerId, ctx.playerName, validLinks);
+        document.getElementById('submitted-note').classList.remove('hidden');
+      } catch (err) {
+        showPhaseError(err);
+      }
     });
 
     document.getElementById('close-submissions-btn').addEventListener('click', async e => {
       const btn = e.currentTarget;
       btn.disabled = true;
       btn.textContent = 'Compiling...';
-      const current = window.__totcCurrentRoom;
-      const merged = mergeSubmissions(current.rounds?.[current.round]?.playerSubmissions || {});
-      await closeSubmissionsAndCompile(ctx.code, current.round, merged);
-      // Left disabled — the phase switches away as soon as `status` updates.
+      try {
+        const current = window.__totcCurrentRoom;
+        const merged = mergeSubmissions(current.rounds?.[current.round]?.playerSubmissions || {});
+        await closeSubmissionsAndCompile(ctx.code, current.round, merged);
+        // Left disabled — the phase switches away as soon as `status` updates.
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = 'Close submissions & compile';
+        showPhaseError(err);
+      }
     });
   }
 

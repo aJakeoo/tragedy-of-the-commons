@@ -29,6 +29,18 @@ function showPhase(status) {
   }
 }
 
+// A fresh page load's Firestore listener can occasionally receive a stale
+// 'lobby' snapshot for a moment right after the write that flips status away
+// from 'lobby' — the write that sent us here already landed (that's why
+// lobby.js navigated), but this brand-new listener's first read can lag it
+// by a beat. Redirecting back to lobby.html on that stale read immediately
+// caused a bounce loop with lobby.js's own "status changed, go to game.html"
+// redirect (observed in testing: 10 rapid lobby.html<->game.html reloads).
+// Waiting briefly for a follow-up snapshot before believing 'lobby' fixes it
+// without introducing a real hang for the genuine case (someone manually
+// loading game.html before the host has started anything).
+let lobbyRedirectTimer = null;
+
 subscribeToRoom(code, room => {
   if (!room) {
     document.getElementById('game-error').textContent = 'This room no longer exists.';
@@ -37,8 +49,17 @@ subscribeToRoom(code, room => {
   }
 
   if (room.status === 'lobby') {
-    window.location.href = 'lobby.html';
+    if (!lobbyRedirectTimer) {
+      lobbyRedirectTimer = setTimeout(() => {
+        window.location.href = 'lobby.html';
+      }, 2000);
+    }
     return;
+  }
+
+  if (lobbyRedirectTimer) {
+    clearTimeout(lobbyRedirectTimer);
+    lobbyRedirectTimer = null;
   }
 
   // Exposed for handlers that need the latest snapshot outside a render

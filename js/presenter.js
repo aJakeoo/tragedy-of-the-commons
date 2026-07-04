@@ -1,4 +1,5 @@
 import { setPresentIndex, setRevealAttribution, startVoting } from './firebase.js';
+import { showPhaseError } from './uiError.js';
 
 let bound = false;
 let startingVoting = false;
@@ -90,12 +91,19 @@ export function render(room, ctx) {
       const r = window.__totcCurrentRoom;
       setRevealAttribution(ctx.code, r.round, e.target.checked);
     });
-    document.getElementById('start-voting-btn').addEventListener('click', e => {
+    document.getElementById('start-voting-btn').addEventListener('click', async e => {
       startingVoting = true;
       const btn = e.currentTarget;
       btn.disabled = true;
       btn.textContent = 'Starting voting...';
-      startVoting(ctx.code);
+      try {
+        await startVoting(ctx.code);
+      } catch (err) {
+        startingVoting = false;
+        btn.disabled = false;
+        btn.textContent = 'Start voting';
+        showPhaseError(err);
+      }
     });
   }
 

@@ -1,5 +1,6 @@
 import { submitBallot, revealResults } from './firebase.js';
 import { VOTE_POINT_BUDGET } from './config.js';
+import { showPhaseError } from './uiError.js';
 
 let draft = {}; // { [entryId]: points }
 let boundRound = null;
@@ -88,8 +89,12 @@ export function render(room, ctx) {
     for (const [entryId, points] of Object.entries(draft)) {
       if (points > 0) cleanBallot[entryId] = points;
     }
-    await submitBallot(ctx.code, round, ctx.playerId, cleanBallot);
-    document.getElementById('ballot-submitted-note').classList.remove('hidden');
+    try {
+      await submitBallot(ctx.code, round, ctx.playerId, cleanBallot);
+      document.getElementById('ballot-submitted-note').classList.remove('hidden');
+    } catch (err) {
+      showPhaseError(err);
+    }
   };
 
   const players = room.players || {};
@@ -100,9 +105,15 @@ export function render(room, ctx) {
 
   document.getElementById('host-reveal-controls').classList.toggle('hidden', !ctx.isHost);
   const revealBtn = document.getElementById('reveal-results-btn');
-  revealBtn.onclick = () => {
+  revealBtn.onclick = async () => {
     revealBtn.disabled = true;
     revealBtn.textContent = 'Revealing...';
-    revealResults(ctx.code);
+    try {
+      await revealResults(ctx.code);
+    } catch (err) {
+      revealBtn.disabled = false;
+      revealBtn.textContent = 'Reveal results';
+      showPhaseError(err);
+    }
   };
 }

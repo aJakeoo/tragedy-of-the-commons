@@ -1,5 +1,6 @@
 import { tallyResults } from './scoring.js';
 import { startNewRound } from './firebase.js';
+import { showPhaseError } from './uiError.js';
 
 let animatedForRound = null;
 let cachedResults = null;
@@ -77,10 +78,16 @@ export function render(room, ctx) {
 
   document.getElementById('host-next-round-controls').classList.toggle('hidden', !ctx.isHost);
   const nextBtn = document.getElementById('next-round-btn');
-  nextBtn.onclick = () => {
+  nextBtn.onclick = async () => {
     nextBtn.disabled = true;
     nextBtn.textContent = 'Starting...';
-    startNewRound(ctx.code, round);
+    try {
+      await startNewRound(ctx.code, round);
+    } catch (err) {
+      nextBtn.disabled = false;
+      nextBtn.textContent = 'Start next round';
+      showPhaseError(err);
+    }
   };
 
   if (animatedForRound === round) {

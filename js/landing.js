@@ -41,7 +41,9 @@ document.getElementById('create-btn').addEventListener('click', async () => {
     savePlayerSession(code, playerId, name);
     window.location.href = 'lobby.html';
   } catch (err) {
-    showError('create-error', err.message || 'Could not create room.');
+    showError('create-error', err.message === 'TIMED_OUT'
+      ? "That took too long — check your connection and try again."
+      : err.message || 'Could not create room.');
     btn.disabled = false;
     btn.textContent = originalLabel;
   }
@@ -66,6 +68,7 @@ document.getElementById('join-btn').addEventListener('click', async () => {
   } catch (err) {
     showError('join-error', err.message === 'ROOM NOT FOUND' ? 'No room with that code.'
       : err.message === 'GAME ALREADY IN PROGRESS' ? 'That game already started.'
+      : err.message === 'TIMED_OUT' ? "That took too long — check your connection and try again."
       : err.message || 'Could not join room.');
     btn.disabled = false;
     btn.textContent = originalLabel;

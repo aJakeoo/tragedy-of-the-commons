@@ -5,10 +5,8 @@ import {
   getDoc,
   setDoc,
   updateDoc,
-  deleteDoc,
   onSnapshot,
-  collection,
-  writeBatch,
+  deleteField,
   serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
@@ -18,7 +16,19 @@ import {
   VOTE_POINT_BUDGET,
   MERGE_VOTE_MULTIPLIER_PER_CONTRIBUTOR,
   PERSIST_SCORES_ACROSS_ROUNDS,
+  FIRESTORE_WRITE_TIMEOUT_MS,
 } from './config.js';
+
+// Firestore calls have been observed to intermittently hang with no thrown
+// error on some networks (see output.md for the investigation) — every
+// read/write below is wrapped in this so a stuck call surfaces a catchable
+// TIMED_OUT error instead of leaving callers (and their UI) waiting forever.
+function withTimeout(promise, ms = FIRESTORE_WRITE_TIMEOUT_MS) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('TIMED_OUT')), ms)),
+  ]);
+}
 
 // ── Firebase config (Firestore) ──────────────────────────────────────────────
 // Pulled from the "tragedy-of-the-commons" Firebase project. Loaded here via
@@ -36,32 +46,39 @@ const FIREBASE_CONFIG = {
 };
 
 // Firestore security rules (see firestore.rules) must allow read/write on
-// rooms/{code} and everything nested under it, or every call below rejects
-// with "Missing or insufficient permissions."
+// rooms/{code}, or every call below rejects with
+// "Missing or insufficient permissions."
 
 const app = initializeApp(FIREBASE_CONFIG);
 const db = getFirestore(app);
 
 const roomRef = code => doc(db, 'rooms', code);
-const playersCol = code => collection(db, 'rooms', code, 'players');
-const playerRef = (code, playerId) => doc(db, 'rooms', code, 'players', playerId);
-const roundRef = (code, round) => doc(db, 'rooms', code, 'rounds', String(round));
-const playerSubmissionsCol = (code, round) => collection(db, 'rooms', code, 'rounds', String(round), 'playerSubmissions');
-const playerSubmissionRef = (code, round, playerId) => doc(db, 'rooms', code, 'rounds', String(round), 'playerSubmissions', playerId);
-const submissionsCol = (code, round) => collection(db, 'rooms', code, 'rounds', String(round), 'submissions');
-const submissionRef = (code, round, entryId) => doc(db, 'rooms', code, 'rounds', String(round), 'submissions', entryId);
-const ballotsCol = (code, round) => collection(db, 'rooms', code, 'rounds', String(round), 'ballots');
-const ballotRef = (code, round, playerId) => doc(db, 'rooms', code, 'rounds', String(round), 'ballots', playerId);
 
-// ── Room / lobby ─────────────────────────────────────────────────────────────
+// Everything for a room — players, every round's submissions and ballots —
+// lives as nested map fields on ONE Firestore document (rooms/{code}),
+// instead of a fan of subcollections. This used to be split across up to
+// six separate documents/collections (room, players, round, playerSubmissions,
+// submissions, ballots), which meant subscribeToRoom() had to open up to six
+// concurrent onSnapshot listeners per client. In testing that fan-out proved
+// unreliable — writeBatch() commits touching multiple of those documents
+// would intermittently hang for 10+ seconds or never resolve at all (no
+// thrown error either), most likely because so many simultaneous
+// long-polling Listen/Write channels from one client strains the connection,
+// especially on mobile networks. A party game's whole room state (a handful
+// of players, a handful of rounds, a few links each) is nowhere near
+// Firestore's 1MB per-document limit, so collapsing it into one document
+// (one listener, one write target) trades subcollection purity for a much
+// more reliable client. Nested map fields are still updated surgically via
+// dot-notation paths (e.g. `players.${playerId}`), so concurrent writes from
+// different players to different keys don't clobber each other.
 
 export async function roomExists(code) {
-  const snap = await getDoc(roomRef(code));
+  const snap = await withTimeout(getDoc(roomRef(code)));
   return snap.exists();
 }
 
 export async function createRoom(code, hostPlayer) {
-  await setDoc(roomRef(code), {
+  await withTimeout(setDoc(roomRef(code), {
     host: hostPlayer.id,
     status: 'lobby',
     round: 0,
@@ -73,26 +90,31 @@ export async function createRoom(code, hostPlayer) {
       mergeMultiplierPerContributor: MERGE_VOTE_MULTIPLIER_PER_CONTRIBUTOR,
       persistScores: PERSIST_SCORES_ACROSS_ROUNDS,
     },
-  });
-  await setDoc(playerRef(code, hostPlayer.id), {
-    name: hostPlayer.name,
-    isHost: true,
-    joinedAt: serverTimestamp(),
-    ...(PERSIST_SCORES_ACROSS_ROUNDS ? { totalScore: 0 } : {}),
-  });
+    players: {
+      [hostPlayer.id]: {
+        name: hostPlayer.name,
+        isHost: true,
+        joinedAt: serverTimestamp(),
+        ...(PERSIST_SCORES_ACROSS_ROUNDS ? { totalScore: 0 } : {}),
+      },
+    },
+    rounds: {},
+  }));
 }
 
 export async function joinRoom(code, player) {
-  const snap = await getDoc(roomRef(code));
+  const snap = await withTimeout(getDoc(roomRef(code)));
   if (!snap.exists()) throw new Error('ROOM NOT FOUND');
   if (snap.data().status !== 'lobby') throw new Error('GAME ALREADY IN PROGRESS');
 
-  await setDoc(playerRef(code, player.id), {
-    name: player.name,
-    isHost: false,
-    joinedAt: serverTimestamp(),
-    ...(PERSIST_SCORES_ACROSS_ROUNDS ? { totalScore: 0 } : {}),
-  });
+  await withTimeout(updateDoc(roomRef(code), {
+    [`players.${player.id}`]: {
+      name: player.name,
+      isHost: false,
+      joinedAt: serverTimestamp(),
+      ...(PERSIST_SCORES_ACROSS_ROUNDS ? { totalScore: 0 } : {}),
+    },
+  }));
 }
 
 // Firestore has no server-side "on disconnect" primitive like Realtime
@@ -104,137 +126,69 @@ export function armDisconnectCleanup() {}
 export async function cancelDisconnectCleanup() {}
 
 export async function removePlayer(code, playerId) {
-  await deleteDoc(playerRef(code, playerId));
+  await withTimeout(updateDoc(roomRef(code), { [`players.${playerId}`]: deleteField() }));
 }
 
-// Fires cb with a merged room object (or null if the room doesn't exist) on
-// every change to the room doc, its players, or the current round's nested
-// data (round doc, playerSubmissions, submissions, ballots). Firestore has
-// no single-path "give me this whole subtree" listener the way Realtime
-// Database does, so this fans out to several onSnapshot listeners and
-// assembles their results into the same shape the rest of the app expects:
-// { ...roomFields, players: {id: {...}}, rounds: { [round]: { ...roundFields,
-// playerSubmissions: {...}, submissions: {...}, ballots: {...} } } }
+// Fires cb with the room document's data (or null if it doesn't exist) on
+// every change. A single listener for the whole room — see the note above
+// on why this replaced a multi-listener fan-out.
 export function subscribeToRoom(code, cb) {
-  const state = { players: {}, rounds: {} };
-  let roomExistsFlag = true;
-  let currentRound = null;
-  let roundUnsubs = [];
-
-  function emit() {
-    cb(roomExistsFlag ? { ...state } : null);
-  }
-
-  function teardownRoundListeners() {
-    roundUnsubs.forEach(u => u());
-    roundUnsubs = [];
-  }
-
-  function setupRoundListeners(round) {
-    teardownRoundListeners();
-    currentRound = round;
-    if (round === null || round === undefined) return;
-    state.rounds[round] = state.rounds[round] || {};
-
-    roundUnsubs.push(onSnapshot(roundRef(code, round), snap => {
-      state.rounds[round] = { ...state.rounds[round], ...(snap.exists() ? snap.data() : {}) };
-      emit();
-    }));
-    roundUnsubs.push(onSnapshot(playerSubmissionsCol(code, round), snap => {
-      const obj = {};
-      snap.forEach(d => { obj[d.id] = d.data(); });
-      state.rounds[round] = { ...state.rounds[round], playerSubmissions: obj };
-      emit();
-    }));
-    roundUnsubs.push(onSnapshot(submissionsCol(code, round), snap => {
-      const obj = {};
-      snap.forEach(d => { obj[d.id] = d.data(); });
-      state.rounds[round] = { ...state.rounds[round], submissions: obj };
-      emit();
-    }));
-    roundUnsubs.push(onSnapshot(ballotsCol(code, round), snap => {
-      const obj = {};
-      snap.forEach(d => { obj[d.id] = d.data(); });
-      state.rounds[round] = { ...state.rounds[round], ballots: obj };
-      emit();
-    }));
-  }
-
-  const unsubRoom = onSnapshot(roomRef(code), snap => {
-    if (!snap.exists()) {
-      roomExistsFlag = false;
-      emit();
-      return;
-    }
-    roomExistsFlag = true;
-    Object.assign(state, snap.data());
-    if (state.round !== currentRound) setupRoundListeners(state.round);
-    emit();
-  });
-
-  const unsubPlayers = onSnapshot(playersCol(code), snap => {
-    const obj = {};
-    snap.forEach(d => { obj[d.id] = d.data(); });
-    state.players = obj;
-    emit();
-  });
-
-  return () => {
-    unsubRoom();
-    unsubPlayers();
-    teardownRoundListeners();
-  };
+  return onSnapshot(roomRef(code), snap => cb(snap.exists() ? snap.data() : null));
 }
 
 // ── Round lifecycle ──────────────────────────────────────────────────────────
 
 export async function startRound(code, round) {
-  const batch = writeBatch(db);
-  batch.set(roomRef(code), { status: 'submitting', round }, { merge: true });
-  batch.set(roundRef(code, round), {
-    startedAt: serverTimestamp(),
-    presentIndex: 0,
-    revealAttribution: false,
-  });
-  await batch.commit();
+  await withTimeout(updateDoc(roomRef(code), {
+    status: 'submitting',
+    round,
+    [`rounds.${round}`]: {
+      startedAt: serverTimestamp(),
+      presentIndex: 0,
+      revealAttribution: false,
+      playerSubmissions: {},
+      submissions: {},
+      ballots: {},
+    },
+  }));
 }
 
 export async function submitPlayerLinks(code, round, playerId, playerName, links) {
-  await setDoc(playerSubmissionRef(code, round, playerId), {
-    name: playerName,
-    links,
-    submittedAt: serverTimestamp(),
-  });
+  await withTimeout(updateDoc(roomRef(code), {
+    [`rounds.${round}.playerSubmissions.${playerId}`]: {
+      name: playerName,
+      links,
+      submittedAt: serverTimestamp(),
+    },
+  }));
 }
 
 export async function closeSubmissionsAndCompile(code, round, mergedEntries) {
-  const batch = writeBatch(db);
-  for (const [entryId, entry] of Object.entries(mergedEntries)) {
-    batch.set(submissionRef(code, round, entryId), entry);
-  }
-  batch.update(roomRef(code), { status: 'compiling' });
-  batch.update(roundRef(code, round), { presentIndex: 0 });
-  await batch.commit();
+  await withTimeout(updateDoc(roomRef(code), {
+    status: 'compiling',
+    [`rounds.${round}.submissions`]: mergedEntries,
+    [`rounds.${round}.presentIndex`]: 0,
+  }));
 }
 
 export async function setPresentIndex(code, round, index) {
-  await updateDoc(roundRef(code, round), { presentIndex: index });
+  await withTimeout(updateDoc(roomRef(code), { [`rounds.${round}.presentIndex`]: index }));
 }
 
 export async function setRevealAttribution(code, round, revealed) {
-  await updateDoc(roundRef(code, round), { revealAttribution: revealed });
+  await withTimeout(updateDoc(roomRef(code), { [`rounds.${round}.revealAttribution`]: revealed }));
 }
 
 export async function startVoting(code) {
-  await updateDoc(roomRef(code), { status: 'voting' });
+  await withTimeout(updateDoc(roomRef(code), { status: 'voting' }));
 }
 
 export async function submitBallot(code, round, playerId, ballot) {
-  await setDoc(ballotRef(code, round, playerId), ballot);
+  await withTimeout(updateDoc(roomRef(code), { [`rounds.${round}.ballots.${playerId}`]: ballot }));
 }
 
 export async function revealResults(code) {
-  await updateDoc(roomRef(code), { status: 'reveal' });
+  await withTimeout(updateDoc(roomRef(code), { status: 'reveal' }));
 }
 
 // Applies a round's weighted results to each contributing player's running
@@ -242,15 +196,15 @@ export async function revealResults(code) {
 // PERSIST_SCORES_ACROSS_ROUNDS in config.js) — stubbed for a future toggle,
 // not required by the current build.
 export async function applyRoundResultsToScores(code, results, players) {
-  const batch = writeBatch(db);
+  const updates = {};
   for (const result of results) {
     const share = Math.round(result.weightedPoints / result.contributors.length);
     for (const contributor of result.contributors) {
       const current = players[contributor.id]?.totalScore || 0;
-      batch.update(playerRef(code, contributor.id), { totalScore: current + share });
+      updates[`players.${contributor.id}.totalScore`] = current + share;
     }
   }
-  await batch.commit();
+  await withTimeout(updateDoc(roomRef(code), updates));
 }
 
 export async function startNewRound(code, previousRound) {
