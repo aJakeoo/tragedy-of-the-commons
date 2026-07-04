@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <h1 id="game-title"></h1>
+  <p class="muted" id="round-label"></p>
+
+  <!-- SUBMITTING -->
+  <section id="phase-submitting" class="hidden">
+    <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill"></div></div>
+    <p class="muted" id="timer-label"></p>
+
+    <div id="link-slots"></div>
+
+    <button class="primary" id="submit-links-btn">Submit my links</button>
+    <p class="muted hidden" id="submitted-note">Submitted! You can still edit and resubmit before the host closes submissions.</p>
+
+    <div class="card">
+      <p class="muted" id="submission-progress"></p>
+    </div>
+
+    <div id="host-close-controls" class="card hidden">
+      <button class="primary" id="close-submissions-btn">Close submissions &amp; compile</button>
+    </div>
+  </section>
+
+  <!-- COMPILING (host presenter) -->
+  <section id="phase-compiling" class="hidden">
+    <div class="card presenter-card" id="presenter-card"></div>
+
+    <div id="host-presenter-controls" class="hidden">
+      <div class="presenter-nav">
+        <button id="presenter-prev-btn">&larr; Prev</button>
+        <span class="muted" id="presenter-position"></span>
+        <button id="presenter-next-btn">Next &rarr;</button>
+      </div>
+      <div class="row between" style="margin-top:1rem">
+        <label class="row" style="margin:0">
+          <input type="checkbox" id="attribution-toggle" style="width:auto;margin-right:0.5rem">
+          Show who submitted each clip
+        </label>
+      </div>
+      <button class="primary" id="start-voting-btn" style="margin-top:1rem">Start voting</button>
+    </div>
+
+    <p class="muted hidden" id="guest-watching-note">Watching along &mdash; the host is driving this screen.</p>
+  </section>
+
+  <!-- VOTING -->
+  <section id="phase-voting" class="hidden">
+    <p>Points remaining: <span class="budget-remaining" id="budget-remaining"></span></p>
+    <div id="ballot-entries"></div>
+    <button class="primary" id="submit-ballot-btn">Submit ballot</button>
+    <p class="muted hidden" id="ballot-submitted-note">Ballot submitted! You can change it and resubmit until the host reveals results.</p>
+
+    <div class="card">
+      <p class="muted" id="voting-progress"></p>
+    </div>
+
+    <div id="host-reveal-controls" class="card hidden">
+      <button class="primary" id="reveal-results-btn">Reveal results</button>
+    </div>
+  </section>
+
+  <!-- REVEAL -->
+  <section id="phase-reveal" class="hidden">
+    <div id="tally-stage"></div>
+    <ol class="reveal-list" id="reveal-list"></ol>
+
+    <div id="host-next-round-controls" class="card hidden">
+      <button class="primary" id="next-round-btn">Start next round</button>
+    </div>
+  </section>
+
+  <p class="error hidden" id="game-error"></p>
+
+  <footer class="build-note">Placeholder UI &mdash; visual design pass comes later.</footer>
+
+  <script type="module" src="js/game.js"></script>
+</body>
+</html>

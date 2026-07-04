@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lobby</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <h1 id="game-title">Lobby</h1>
+
+  <div class="room-code" id="room-code">----</div>
+  <p class="muted" style="text-align:center">Share this code with everyone playing.</p>
+
+  <div class="card">
+    <h2>Players</h2>
+    <ul class="player-list" id="player-list"></ul>
+  </div>
+
+  <div id="host-controls" class="card hidden">
+    <button class="primary" id="start-btn">Start game</button>
+    <p class="muted" id="start-hint"></p>
+  </div>
+
+  <div id="guest-controls" class="card hidden">
+    <p class="muted">Waiting for the host to start the game&hellip;</p>
+  </div>
+
+  <p class="error hidden" id="lobby-error"></p>
+
+  <footer class="build-note">Placeholder UI &mdash; visual design pass comes later.</footer>
+
+  <script type="module" src="js/lobby.js"></script>
+</body>
+</html>

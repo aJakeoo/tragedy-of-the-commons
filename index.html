@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tragedy of the Comments</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <h1 id="game-title">Tragedy of the Comments</h1>
+  <p class="muted" id="game-tagline">A party game of terrible taste and shared blame.</p>
+
+  <div class="card stack">
+    <h2>Create a room</h2>
+    <label for="create-name">Your name</label>
+    <input type="text" id="create-name" maxlength="20" placeholder="e.g. Jordan">
+    <button class="primary" id="create-btn">Create room</button>
+    <p class="error hidden" id="create-error"></p>
+  </div>
+
+  <div class="card stack">
+    <h2>Join a room</h2>
+    <label for="join-name">Your name</label>
+    <input type="text" id="join-name" maxlength="20" placeholder="e.g. Jordan">
+    <label for="join-code">Room code</label>
+    <input type="text" id="join-code" maxlength="4" placeholder="e.g. AB3D" style="text-transform:uppercase">
+    <button class="primary" id="join-btn">Join room</button>
+    <p class="error hidden" id="join-error"></p>
+  </div>
+
+  <footer class="build-note">Placeholder UI &mdash; visual design pass comes later.</footer>
+
+  <script type="module" src="js/landing.js"></script>
+</body>
+</html>

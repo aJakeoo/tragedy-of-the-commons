@@ -1,0 +1,166 @@
+/* Placeholder visual layer — functional only. A design pass replaces this later.
+   Keep selectors semantic/component-based so restyling doesn't require a rewrite. */
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 1.5rem;
+  max-width: 720px;
+  margin-inline: auto;
+  color: #1a1a1a;
+  background: #fafafa;
+  line-height: 1.4;
+}
+
+h1, h2, h3 { margin-top: 0; }
+
+a { color: #1a5fb4; }
+
+button {
+  font-size: 1rem;
+  padding: 0.6rem 1.1rem;
+  border: 1px solid #333;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+button:hover { background: #eee; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.primary { background: #1a5fb4; color: #fff; border-color: #1a5fb4; }
+button.primary:hover { background: #164a8e; }
+button.danger { border-color: #a00; color: #a00; }
+
+input[type="text"], input[type="url"] {
+  font-size: 1rem;
+  padding: 0.5rem;
+  width: 100%;
+  border: 1px solid #999;
+  border-radius: 4px;
+}
+
+label { display: block; margin: 0.75rem 0 0.25rem; font-weight: 600; }
+
+.card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 0.75rem 0;
+  background: #fff;
+}
+
+.row { display: flex; gap: 0.5rem; align-items: center; }
+.row.between { justify-content: space-between; }
+.stack { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.muted { color: #666; font-size: 0.9rem; }
+.error { color: #a00; font-size: 0.9rem; }
+
+.hidden { display: none !important; }
+
+.room-code {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-align: center;
+  padding: 0.5rem;
+  background: #eef3fb;
+  border-radius: 8px;
+}
+
+.player-list { list-style: none; padding: 0; }
+.player-list li {
+  padding: 0.5rem;
+  border-bottom: 1px solid #eee;
+}
+.player-list li.host::after { content: ' (host)'; color: #666; font-size: 0.85rem; }
+
+/* Submission phase */
+.timer-bar-track {
+  width: 100%;
+  height: 8px;
+  background: #eee;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 0.5rem 0 1rem;
+}
+.timer-bar-fill {
+  height: 100%;
+  background: #1a5fb4;
+  transition: width 1s linear, background-color 0.3s;
+}
+.timer-bar-fill.low { background: #c9302c; }
+
+.link-slot { border: 1px solid #ccc; border-radius: 6px; padding: 0.75rem; margin-bottom: 0.5rem; }
+.link-slot.valid { border-color: #2e7d32; }
+.link-slot.invalid { border-color: #c9302c; }
+.link-slot .status { font-size: 0.85rem; margin-top: 0.25rem; }
+.link-slot .status.ok { color: #2e7d32; }
+.link-slot .status.bad { color: #c9302c; }
+.link-slot .status.checking { color: #666; }
+
+/* Compiled list / presenter */
+.presenter-card { text-align: center; }
+.presenter-card img { max-width: 100%; max-height: 420px; width: auto; object-fit: contain; border-radius: 8px; }
+.presenter-nav { display: flex; justify-content: space-between; margin-top: 1rem; }
+.contributor-tag {
+  display: inline-block;
+  background: #eef3fb;
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  margin: 0.15rem;
+  font-size: 0.85rem;
+}
+
+/* Voting */
+.ballot-entry { border: 1px solid #ddd; border-radius: 6px; padding: 0.75rem; margin-bottom: 0.5rem; }
+.ballot-entry.disabled { opacity: 0.5; }
+.ballot-entry .points-input { width: 4rem; text-align: center; }
+.budget-remaining { font-weight: 700; font-size: 1.2rem; }
+.budget-remaining.over { color: #c9302c; }
+
+/* Reveal */
+.reveal-list { list-style: none; padding: 0; }
+.reveal-entry {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.6rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  opacity: 0;
+  transform: translateY(12px);
+  animation: revealIn 0.5s ease forwards;
+}
+.reveal-entry .rank { font-weight: 700; width: 2.5rem; }
+.reveal-entry .points { font-variant-numeric: tabular-nums; font-weight: 700; }
+.reveal-entry.winner {
+  border-color: #d4a017;
+  background: #fff9e6;
+  transform: scale(1.03);
+  box-shadow: 0 0 0 2px #d4a017;
+}
+@keyframes revealIn {
+  to { opacity: 1; transform: translateY(0); }
+}
+.reveal-entry.winner { animation: revealIn 0.5s ease forwards, winnerPulse 1s ease 0.5s; }
+@keyframes winnerPulse {
+  0%, 100% { transform: scale(1.03); }
+  50% { transform: scale(1.08); }
+}
+
+.tally-count {
+  font-size: 3rem;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+footer.build-note {
+  margin-top: 2rem;
+  font-size: 0.8rem;
+  color: #999;
+  text-align: center;
+}
