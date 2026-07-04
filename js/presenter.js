@@ -61,6 +61,8 @@ function renderContributors(card, entry, revealAttribution) {
   const wrap = card.querySelector('.presenter-contributors');
   if (!wrap) return;
   wrap.innerHTML = '';
+  const isMerged = (entry.contributors || []).length > 1;
+
   if (revealAttribution) {
     (entry.contributors || []).forEach(c => {
       const tag = document.createElement('span');
@@ -73,6 +75,13 @@ function renderContributors(card, entry, revealAttribution) {
     hidden.className = 'muted';
     hidden.textContent = 'Submitted by: hidden';
     wrap.appendChild(hidden);
+  }
+
+  if (isMerged) {
+    const badge = document.createElement('span');
+    badge.className = 'weight-badge';
+    badge.textContent = `×${entry.contributors.length} weight`;
+    wrap.appendChild(badge);
   }
 }
 

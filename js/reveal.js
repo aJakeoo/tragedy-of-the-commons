@@ -1,6 +1,7 @@
 import { tallyResults } from './scoring.js';
 import { startNewRound } from './firebase.js';
 import { showPhaseError } from './uiError.js';
+import { ordinal } from './format.js';
 
 let animatedForRound = null;
 let cachedResults = null;
@@ -77,10 +78,10 @@ function revealVoterBreakdown(row, result, players, startDelayMs) {
   const flourishDelay = lastVoterDelay + FLOURISH_BUFFER_MS;
   pendingTimers.push(setTimeout(() => {
     if (result.multiplier > 1) {
-      const multiplierNote = document.createElement('div');
-      multiplierNote.className = 'muted';
-      multiplierNote.textContent = `${result.rawPoints} raw × ${result.multiplier} weight`;
-      breakdownEl.appendChild(multiplierNote);
+      const weightBadge = document.createElement('span');
+      weightBadge.className = 'weight-badge';
+      weightBadge.textContent = `×${result.multiplier} weight`;
+      breakdownEl.appendChild(weightBadge);
     }
     pointsEl.textContent = `${result.weightedPoints} pt${result.weightedPoints === 1 ? '' : 's'}`;
     pointsEl.classList.add('points-final');
@@ -105,7 +106,7 @@ function renderLeaderboard(results, players) {
 
     const rank = document.createElement('span');
     rank.className = 'rank';
-    rank.textContent = `#${r.rank}`;
+    rank.textContent = ordinal(r.rank);
 
     const info = document.createElement('span');
     info.style.flex = '1';
@@ -170,10 +171,20 @@ export function render(room, ctx) {
 
   document.getElementById('reveal-list').innerHTML = '';
   nextBtn.disabled = true;
+  const banner = document.getElementById('champion-banner');
+  banner.classList.remove('visible');
 
   runTallyCountUp(totalRawPoints, () => {
     document.getElementById('tally-stage').innerHTML = '';
     const settleMs = renderLeaderboard(cachedResults, players);
-    pendingTimers.push(setTimeout(() => { nextBtn.disabled = false; }, settleMs));
+    pendingTimers.push(setTimeout(() => {
+      nextBtn.disabled = false;
+      const winner = cachedResults.find(r => r.rank === 1);
+      if (winner) {
+        document.getElementById('champion-handle').textContent =
+          `${winner.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels'} — ${winner.title || winner.url}`;
+        banner.classList.add('visible');
+      }
+    }, settleMs));
   });
 }

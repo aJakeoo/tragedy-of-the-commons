@@ -1,12 +1,13 @@
 import { subscribeToRoom } from './firebase.js';
 import { GAME_NAME } from './config.js';
+import { toRoman } from './format.js';
 import * as submission from './submission.js';
 import * as presenter from './presenter.js';
 import * as voting from './voting.js';
 import * as reveal from './reveal.js';
 
 document.title = GAME_NAME;
-document.getElementById('game-title').textContent = GAME_NAME;
+document.getElementById('game-title').textContent = GAME_NAME.toUpperCase();
 
 const code = sessionStorage.getItem('totc_roomCode');
 const playerId = sessionStorage.getItem('totc_playerId');
@@ -66,7 +67,7 @@ subscribeToRoom(code, room => {
   // callback (e.g. a button click reading current submissions to merge).
   window.__totcCurrentRoom = room;
 
-  document.getElementById('round-label').textContent = `Round ${room.round}`;
+  document.getElementById('round-label').textContent = `Round ${toRoman(room.round)}`;
 
   const ctx = {
     code,

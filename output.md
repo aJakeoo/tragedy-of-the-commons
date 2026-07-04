@@ -359,3 +359,57 @@ the TikTok embed rendering latency (2-15s per clip) beyond documenting it —
 there's no loading indicator on individual grid cards distinguishing "still
 processing" from "processed, never played." Could add a lightweight skeleton
 state if this becomes an issue with larger rounds in practice.
+
+## Session 5 — Visual design pass (Roman/classical theme)
+
+Applied the visual design from a Claude Design mockup, "Tragedy of the
+Commons.dc.html". This was a styling-only pass — no changes to game logic,
+Firestore schema, or DOM element IDs, so every `js/*.js` module needed only
+small additive tweaks (a couple of new elements to populate, no restructuring).
+
+**How the design was sourced:** the user first pointed at a `claude.ai/design`
+share link; that content never actually reached this session (no attachment,
+no tool output containing it — genuinely never arrived, not something skipped).
+Fetched the real source afterward via the `DesignSync` tool: `get_project`
+identified the project as type `PROJECT_TYPE_PROJECT` (not the design-system
+type the tool is nominally scoped to), but `list_files` / `get_file` worked
+against it anyway. Also cross-checked against a second file the user provided
+locally, `Tragedy of the Commons (standalone).html` — a bundled/compiled
+export (~165K tokens of inlined runtime, not readable as source) — by serving
+it locally through `serve.js` and viewing it in a browser tab as a visual
+reference, which confirmed the design tokens pulled from the `.dc.html`
+source were accurate before applying them.
+
+**Design language applied:**
+- Typography: Cinzel (serif, headers/display numbers) + Public Sans (body),
+  loaded via Google Fonts on all three HTML pages
+- Palette: warm cream/ivory background (OKLCH), terracotta accent for
+  primary actions and room codes, dark green for the host badge and merge
+  "weight" badges, gold gradient + pulsing glow for the reveal winner row
+- Room code and player list restyled with avatar-circle initials and a
+  pill-shaped host badge, matching the mockup's lobby screen
+- `game.html`'s header restructured into a small wordmark + round indicator
+  bar (round number now shown as a Roman numeral, e.g. "ROUND I") — the one
+  actual DOM structure change this session, isolated to a `<header>` wrapper
+  around the two already-existing `#game-title`/`#round-label` elements
+- Reveal ranks now show as ordinals ("1st", "2nd") instead of "#1"/"#2"
+  (new `js/format.js` with `toRoman`/`ordinal` helpers, shared by
+  `game.js` and `reveal.js`)
+- Merged/duplicate entries now show a "×N weight" pill badge (new
+  `.weight-badge` CSS class) in the presenter grid, the voting ballot, and
+  the reveal breakdown — previously this was inconsistent (presenter grid
+  had none, reveal had a plain muted text line)
+- Added a "Champion of the round" banner below the reveal list, fading in
+  once the full reveal animation settles, matching the mockup
+
+**QA:** ran a full round locally (create room → lobby → submit → presenter
+grid → voting → reveal) taking a screenshot at each phase to check for
+layout breakage, unreadable contrast, or overflow. Found and fixed one real
+issue: the "Champion of the round" banner rendered correctly but was easy to
+miss in a full-page screenshot (gold text on cream background, positioned in
+a quiet gap) — confirmed via `getBoundingClientRect()` and a zoomed
+screenshot that it *is* rendering with the right content and full opacity,
+so left as-is rather than over-designing a fix for what turned out to be a
+screenshot-legibility issue, not a real bug. Also replaced the three pages'
+stale "Placeholder UI — visual design pass comes later" footer text, since
+the design pass had, at that point, actually happened.

@@ -17,6 +17,13 @@ function renderEntries(entries, budget, ctx) {
     title.textContent = `${entry.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels'} — ${entry.title || entry.url}`;
     div.appendChild(title);
 
+    if ((entry.contributors || []).length > 1) {
+      const badge = document.createElement('span');
+      badge.className = 'weight-badge';
+      badge.textContent = `×${entry.contributors.length} weight`;
+      div.appendChild(badge);
+    }
+
     const link = document.createElement('a');
     link.href = entry.url;
     link.target = '_blank';

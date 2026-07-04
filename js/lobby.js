@@ -55,9 +55,26 @@ unsubscribe = subscribeToRoom(code, room => {
   const list = document.getElementById('player-list');
   list.innerHTML = '';
   for (const id of playerIds) {
+    const player = players[id];
     const li = document.createElement('li');
-    li.textContent = players[id].name;
-    if (players[id].isHost) li.classList.add('host');
+
+    const avatar = document.createElement('span');
+    avatar.className = 'avatar';
+    avatar.textContent = (player.name?.[0] || '?').toUpperCase();
+    li.appendChild(avatar);
+
+    const name = document.createElement('span');
+    name.className = 'player-name';
+    name.textContent = player.name;
+    li.appendChild(name);
+
+    if (player.isHost) {
+      const badge = document.createElement('span');
+      badge.className = 'host-badge';
+      badge.textContent = 'Host';
+      li.appendChild(badge);
+    }
+
     list.appendChild(li);
   }
 

@@ -4,11 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <h1 id="game-title"></h1>
-  <p class="muted" id="round-label"></p>
+  <header class="game-header">
+    <p class="wordmark" id="game-title"></p>
+    <p class="round-badge" id="round-label"></p>
+  </header>
 
   <!-- SUBMITTING -->
   <section id="phase-submitting" class="hidden">
@@ -64,6 +68,10 @@
   <section id="phase-reveal" class="hidden">
     <div id="tally-stage"></div>
     <ol class="reveal-list" id="reveal-list"></ol>
+    <div class="champion-banner" id="champion-banner">
+      <span class="label">Champion of the round:</span>
+      <span class="handle" id="champion-handle"></span>
+    </div>
 
     <div id="host-next-round-controls" class="card hidden">
       <button class="primary" id="next-round-btn">Start next round</button>
@@ -72,7 +80,7 @@
 
   <p class="error hidden" id="game-error"></p>
 
-  <footer class="build-note">Placeholder UI &mdash; visual design pass comes later.</footer>
+  <footer class="build-note">Tragedy of the Comments</footer>
 
   <script type="module" src="js/game.js"></script>
 </body>
