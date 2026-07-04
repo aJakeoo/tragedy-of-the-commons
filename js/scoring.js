@@ -10,8 +10,8 @@ export function sanitizeKey(raw) {
 // canonical ID. Two players pasting the same video end up as one entry with
 // both names in `contributors`, whatever order they submitted in.
 //
-// playerSubmissions: { [playerId]: { name, links: [{ url, platform, canonicalId, thumbnail, title, author }] } }
-// returns: { [entryId]: { canonicalId, platform, url, thumbnail, title, author, contributors: [{id, name}] } }
+// playerSubmissions: { [playerId]: { name, links: [{ url, platform, canonicalId, thumbnail, title, author, embedHtml }] } }
+// returns: { [entryId]: { canonicalId, platform, url, thumbnail, title, author, embedHtml, contributors: [{id, name}] } }
 export function mergeSubmissions(playerSubmissions) {
   const entries = {};
   for (const [playerId, sub] of Object.entries(playerSubmissions || {})) {
@@ -25,6 +25,7 @@ export function mergeSubmissions(playerSubmissions) {
           thumbnail: link.thumbnail || null,
           title: link.title || '',
           author: link.author || '',
+          embedHtml: link.embedHtml || null,
           contributors: [],
         };
       }

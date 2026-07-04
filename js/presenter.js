@@ -1,65 +1,85 @@
 import { setPresentIndex, setRevealAttribution, startVoting } from './firebase.js';
 import { showPhaseError } from './uiError.js';
+import { renderTikTokEmbed, renderInstagramEmbed } from './embeds.js';
 
 let bound = false;
 let startingVoting = false;
 let presenterRound = null;
+let lastRenderedEntryId = null;
 
-function renderCard(entry, revealAttribution) {
+function renderCard(entryId, entry, revealAttribution) {
   const card = document.getElementById('presenter-card');
-  card.innerHTML = '';
 
   if (!entry) {
+    lastRenderedEntryId = null;
     card.innerHTML = '<p class="muted">No clips were submitted this round.</p>';
     return;
   }
 
-  const badge = document.createElement('p');
-  badge.className = 'muted';
-  badge.textContent = entry.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels';
-  card.appendChild(badge);
+  // Only re-render the embed itself when the clip actually changes — this
+  // function also re-runs on unrelated updates (e.g. the attribution toggle
+  // firing a new room snapshot), and reloading a TikTok/Instagram embed
+  // resets any playback the host already started.
+  if (entryId !== lastRenderedEntryId) {
+    lastRenderedEntryId = entryId;
+    card.innerHTML = '';
 
-  if (entry.thumbnail) {
-    const img = document.createElement('img');
-    img.src = entry.thumbnail;
-    img.alt = entry.title || 'Clip thumbnail';
-    card.appendChild(img);
+    const badge = document.createElement('p');
+    badge.className = 'muted';
+    badge.textContent = entry.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels';
+    card.appendChild(badge);
+
+    const embedContainer = document.createElement('div');
+    embedContainer.id = 'presenter-embed';
+    card.appendChild(embedContainer);
+    if (entry.platform === 'tiktok' && entry.embedHtml) {
+      renderTikTokEmbed(embedContainer, entry.embedHtml);
+    } else {
+      // Instagram links (and a TikTok entry with no embed HTML for some
+      // reason) fall back to Instagram's own embed widget or, failing that,
+      // a plain link — either way the host still doesn't need this app's
+      // "Open clip" link to be the ONLY option.
+      renderInstagramEmbed(embedContainer, entry.url);
+    }
+
+    if (entry.title) {
+      const title = document.createElement('p');
+      title.textContent = entry.title;
+      card.appendChild(title);
+    }
+
+    const contributorsWrap = document.createElement('div');
+    contributorsWrap.id = 'presenter-contributors';
+    card.appendChild(contributorsWrap);
   }
 
-  const link = document.createElement('p');
-  const a = document.createElement('a');
-  a.href = entry.url;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-  a.textContent = 'Open clip';
-  link.appendChild(a);
-  card.appendChild(link);
+  renderContributors(entry, revealAttribution);
+}
 
-  if (entry.title) {
-    const title = document.createElement('p');
-    title.textContent = entry.title;
-    card.appendChild(title);
-  }
-
-  const contributorsWrap = document.createElement('div');
+function renderContributors(entry, revealAttribution) {
+  const wrap = document.getElementById('presenter-contributors');
+  if (!wrap) return;
+  wrap.innerHTML = '';
   if (revealAttribution) {
     (entry.contributors || []).forEach(c => {
       const tag = document.createElement('span');
       tag.className = 'contributor-tag';
       tag.textContent = c.name;
-      contributorsWrap.appendChild(tag);
+      wrap.appendChild(tag);
     });
   } else {
-    contributorsWrap.innerHTML = '<span class="muted">Submitted by: hidden</span>';
+    const hidden = document.createElement('span');
+    hidden.className = 'muted';
+    hidden.textContent = 'Submitted by: hidden';
+    wrap.appendChild(hidden);
   }
-  card.appendChild(contributorsWrap);
 }
 
 export function render(room, ctx) {
   const round = room.round;
   const roundData = room.rounds?.[round] || {};
   const submissions = roundData.submissions || {};
-  const entries = Object.values(submissions);
+  const entries = Object.entries(submissions); // [entryId, entry][]
   const presentIndex = Math.min(roundData.presentIndex || 0, Math.max(entries.length - 1, 0));
   const revealAttribution = !!roundData.revealAttribution;
 
@@ -107,7 +127,8 @@ export function render(room, ctx) {
     });
   }
 
-  renderCard(entries[presentIndex], revealAttribution);
+  const [currentEntryId, currentEntry] = entries[presentIndex] || [];
+  renderCard(currentEntryId, currentEntry, revealAttribution);
 
   document.getElementById('host-presenter-controls').classList.toggle('hidden', !ctx.isHost);
   document.getElementById('guest-watching-note').classList.toggle('hidden', ctx.isHost);

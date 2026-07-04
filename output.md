@@ -211,3 +211,45 @@ Firestore REST read (bypassing the app entirely) that `status` flipped to
 `submitting` and `round` to `1` — the actual bug condition (write silently
 never landing) is gone. No page bounce, no stuck button, single clean
 navigation to `game.html`.
+
+## Session 3 — Inline video playback in the presenter view
+
+User asked whether the host could stay in the app during the compiled-list
+phase instead of tapping "Open clip" and leaving to TikTok/Instagram, and
+whether playback could happen automatically.
+
+**What's possible vs. not:** TikTok's oEmbed response (already being fetched
+for validation — see `linkValidation.js`) includes ready-made embed HTML: a
+`<blockquote class="tiktok-embed">` plus their own `embed.js` loader, which
+renders TikTok's real interactive player (like/comment counts, captions, tap
+to play) inline via an iframe. Instagram has an equivalent public embed
+format (`<blockquote class="instagram-media">` + `instagram.com/embed.js`).
+Both were added. True *automatic* playback isn't achievable on either
+platform — browsers block silent autoplay broadly, and neither embed SDK
+exposes an autoplay flag even for muted playback. So the host now stays in
+the app and taps play inline instead of opening a new tab, but a tap is
+still required.
+
+**Changes:**
+- `js/linkValidation.js` — TikTok's oEmbed result now also captures `data.html`
+  (the embed snippet) as `embedHtml`, threaded through `submission.js`'s
+  submit handler and `scoring.js`'s `mergeSubmissions` so it survives into
+  the round's compiled entries.
+- `js/embeds.js` (new) — renders the TikTok blockquote + reloads their
+  `embed.js` (their SDK has no documented "reprocess" call, so a fresh
+  `<script>` tag is swapped in each time, which is the standard trick for
+  single-page apps); renders an Instagram blockquote and calls their
+  documented `instgrm.Embeds.process()`, which does support reprocessing.
+- `js/presenter.js` — replaced the thumbnail image + "Open clip" link with
+  the inline embed. Added a guard (`lastRenderedEntryId`) so the embed only
+  re-renders when the actual clip changes, not on every unrelated snapshot
+  update (e.g. toggling "show who submitted" used to reset/reload whatever
+  the host was watching — confirmed this stays stable across that toggle in
+  testing).
+- `css/style.css` — sizing rules so the embeds (which manage their own
+  internal layout) don't overflow the card.
+
+**Verified:** submitted a known-live TikTok link, closed submissions, and
+confirmed the presenter card renders the real interactive TikTok embed
+(caption, like/comment counts, tap-to-play) instead of a static thumbnail,
+and that toggling the attribution checkbox doesn't reset it.

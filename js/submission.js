@@ -144,6 +144,7 @@ export function render(room, ctx) {
         thumbnail: s.result.thumbnail,
         title: s.result.title,
         author: s.result.author,
+        embedHtml: s.result.embedHtml || null,
       }));
       if (validLinks.length === 0) return;
       try {

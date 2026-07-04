@@ -61,6 +61,13 @@ export async function validateAndResolveLink(rawUrl) {
         thumbnail: data.thumbnail_url || null,
         title: data.title || '',
         author: data.author_name || '',
+        // The oEmbed response's `html` is a ready-made <blockquote> + loader
+        // script snippet — TikTok's own embed widget, not something we build
+        // ourselves. Rendering this in presenter.js lets the host play the
+        // clip inline (tap to play, same as embeds anywhere else) instead of
+        // leaving the app to open TikTok. Stored on the entry now so it
+        // survives the round-close merge and reaches the presenter view.
+        embedHtml: data.html || null,
       };
     } catch {
       return { ok: false, platform, error: "This link didn't work — try another." };
