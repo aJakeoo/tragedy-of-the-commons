@@ -144,7 +144,10 @@ export async function startRound(code, round) {
     round,
     [`rounds.${round}`]: {
       startedAt: serverTimestamp(),
-      revealAttribution: false,
+      // Who submitted each clip is visible to everyone by default — the
+      // host can still hide it via the presenter view's toggle if they want
+      // more anonymity, but that's now an opt-in, not the starting state.
+      revealAttribution: true,
       playerSubmissions: {},
       submissions: {},
       ballots: {},

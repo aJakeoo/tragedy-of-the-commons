@@ -218,11 +218,14 @@ label {
 .link-slot .status.bad { color: var(--color-error); }
 .link-slot .status.checking { color: var(--color-text-muted); }
 
-/* Compiled list / presenter — every clip shows at once, see js/presenter.js */
+/* Compiled list / presenter — every clip shows at once, see js/presenter.js.
+   One clip per row so each video reads as the main event on screen (these
+   are portrait 9:16 clips, so height — not width — is what makes a clip
+   feel "big"; a wide multi-column grid was making them look like thumbnails). */
 .presenter-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1rem;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
   margin-bottom: 1rem;
 }
 .presenter-card {
@@ -231,10 +234,13 @@ label {
   border-radius: var(--radius-lg);
   padding: 0.9rem;
   background: var(--color-card);
+  max-width: 480px;
+  margin-inline: auto;
+  width: 100%;
 }
-.presenter-card img { max-width: 100%; max-height: 420px; width: auto; object-fit: contain; border-radius: var(--radius-sm); }
-.presenter-embed { display: flex; justify-content: center; max-height: 600px; overflow-y: auto; border-radius: var(--radius-sm); }
-.presenter-embed iframe { max-width: 100%; }
+.presenter-card img { max-width: 100%; max-height: 85vh; width: auto; object-fit: contain; border-radius: var(--radius-sm); }
+.presenter-embed { display: flex; justify-content: center; max-height: 85vh; overflow-y: auto; border-radius: var(--radius-sm); }
+.presenter-embed iframe { max-width: 100%; min-height: 70vh; }
 .presenter-embed blockquote.instagram-media { max-width: 100% !important; min-width: 0 !important; }
 .contributor-tag, .weight-badge {
   display: inline-block;
