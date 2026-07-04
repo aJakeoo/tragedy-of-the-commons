@@ -100,13 +100,18 @@ label { display: block; margin: 0.75rem 0 0.25rem; font-weight: 600; }
 .link-slot .status.bad { color: #c9302c; }
 .link-slot .status.checking { color: #666; }
 
-/* Compiled list / presenter */
-.presenter-card { text-align: center; }
+/* Compiled list / presenter — every clip shows at once, see js/presenter.js */
+.presenter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.presenter-card { text-align: center; border: 1px solid #ddd; border-radius: 8px; padding: 0.75rem; background: #fff; }
 .presenter-card img { max-width: 100%; max-height: 420px; width: auto; object-fit: contain; border-radius: 8px; }
-#presenter-embed { display: flex; justify-content: center; max-height: 720px; overflow-y: auto; }
-#presenter-embed iframe { max-width: 100%; }
-#presenter-embed blockquote.instagram-media { max-width: 100% !important; min-width: 0 !important; }
-.presenter-nav { display: flex; justify-content: space-between; margin-top: 1rem; }
+.presenter-embed { display: flex; justify-content: center; max-height: 600px; overflow-y: auto; }
+.presenter-embed iframe { max-width: 100%; }
+.presenter-embed blockquote.instagram-media { max-width: 100% !important; min-width: 0 !important; }
 .contributor-tag {
   display: inline-block;
   background: #eef3fb;
@@ -138,7 +143,19 @@ label { display: block; margin: 0.75rem 0 0.25rem; font-weight: 600; }
   animation: revealIn 0.5s ease forwards;
 }
 .reveal-entry .rank { font-weight: 700; width: 2.5rem; }
-.reveal-entry .points { font-variant-numeric: tabular-nums; font-weight: 700; }
+.reveal-entry .points { font-variant-numeric: tabular-nums; font-weight: 700; transition: transform 0.2s ease; }
+.reveal-entry .points.points-final { transform: scale(1.15); }
+.voter-breakdown { margin-top: 0.25rem; }
+.voter-line {
+  font-size: 0.85rem;
+  color: #2e7d32;
+  opacity: 0;
+  transform: translateX(-6px);
+  animation: voterIn 0.3s ease forwards;
+}
+@keyframes voterIn {
+  to { opacity: 1; transform: translateX(0); }
+}
 .reveal-entry.winner {
   border-color: #d4a017;
   background: #fff9e6;

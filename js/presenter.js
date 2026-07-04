@@ -1,63 +1,59 @@
-import { setPresentIndex, setRevealAttribution, startVoting } from './firebase.js';
+import { setRevealAttribution, startVoting } from './firebase.js';
 import { showPhaseError } from './uiError.js';
-import { renderTikTokEmbed, renderInstagramEmbed } from './embeds.js';
+import {
+  buildTikTokBlockquote,
+  buildInstagramBlockquote,
+  loadTikTokEmbedScript,
+  processInstagramEmbeds,
+  watchForEmbedIframes,
+  resetKnownEmbeds,
+} from './embeds.js';
 
 let bound = false;
 let startingVoting = false;
 let presenterRound = null;
-let lastRenderedEntryId = null;
+let renderedEntryIds = null; // sorted, joined — identifies the current grid's contents
+let gridObserver = null;
 
-function renderCard(entryId, entry, revealAttribution) {
-  const card = document.getElementById('presenter-card');
+function buildCard(entryId, entry) {
+  const card = document.createElement('div');
+  card.className = 'presenter-card';
+  card.dataset.entryId = entryId;
 
-  if (!entry) {
-    lastRenderedEntryId = null;
-    card.innerHTML = '<p class="muted">No clips were submitted this round.</p>';
-    return;
+  const badge = document.createElement('p');
+  badge.className = 'muted';
+  badge.textContent = entry.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels';
+  card.appendChild(badge);
+
+  const embedContainer = document.createElement('div');
+  embedContainer.className = 'presenter-embed';
+  card.appendChild(embedContainer);
+
+  let hasTikTokEmbed = false;
+  if (entry.platform === 'tiktok' && entry.embedHtml) {
+    embedContainer.appendChild(buildTikTokBlockquote(entry.embedHtml));
+    hasTikTokEmbed = true;
+  } else {
+    // Instagram links (and a TikTok entry with no embed HTML for some
+    // reason) fall back to Instagram's own embed widget.
+    embedContainer.appendChild(buildInstagramBlockquote(entry.url));
   }
 
-  // Only re-render the embed itself when the clip actually changes — this
-  // function also re-runs on unrelated updates (e.g. the attribution toggle
-  // firing a new room snapshot), and reloading a TikTok/Instagram embed
-  // resets any playback the host already started.
-  if (entryId !== lastRenderedEntryId) {
-    lastRenderedEntryId = entryId;
-    card.innerHTML = '';
-
-    const badge = document.createElement('p');
-    badge.className = 'muted';
-    badge.textContent = entry.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels';
-    card.appendChild(badge);
-
-    const embedContainer = document.createElement('div');
-    embedContainer.id = 'presenter-embed';
-    card.appendChild(embedContainer);
-    if (entry.platform === 'tiktok' && entry.embedHtml) {
-      renderTikTokEmbed(embedContainer, entry.embedHtml);
-    } else {
-      // Instagram links (and a TikTok entry with no embed HTML for some
-      // reason) fall back to Instagram's own embed widget or, failing that,
-      // a plain link — either way the host still doesn't need this app's
-      // "Open clip" link to be the ONLY option.
-      renderInstagramEmbed(embedContainer, entry.url);
-    }
-
-    if (entry.title) {
-      const title = document.createElement('p');
-      title.textContent = entry.title;
-      card.appendChild(title);
-    }
-
-    const contributorsWrap = document.createElement('div');
-    contributorsWrap.id = 'presenter-contributors';
-    card.appendChild(contributorsWrap);
+  if (entry.title) {
+    const title = document.createElement('p');
+    title.textContent = entry.title;
+    card.appendChild(title);
   }
 
-  renderContributors(entry, revealAttribution);
+  const contributorsWrap = document.createElement('div');
+  contributorsWrap.className = 'presenter-contributors';
+  card.appendChild(contributorsWrap);
+
+  return { card, hasTikTokEmbed };
 }
 
-function renderContributors(entry, revealAttribution) {
-  const wrap = document.getElementById('presenter-contributors');
+function renderContributors(card, entry, revealAttribution) {
+  const wrap = card.querySelector('.presenter-contributors');
   if (!wrap) return;
   wrap.innerHTML = '';
   if (revealAttribution) {
@@ -75,12 +71,39 @@ function renderContributors(entry, revealAttribution) {
   }
 }
 
+// Rebuilds the whole grid — only called when the actual set of entries for
+// this round changes, not on every snapshot (e.g. toggling attribution
+// shouldn't reload every embed and reset any playback in progress).
+function renderGrid(entries) {
+  const grid = document.getElementById('presenter-grid');
+  grid.innerHTML = '';
+  if (gridObserver) gridObserver.disconnect();
+  resetKnownEmbeds();
+
+  if (entries.length === 0) {
+    grid.innerHTML = '<p class="muted">No clips were submitted this round.</p>';
+    return;
+  }
+
+  let anyTikTok = false;
+  for (const [entryId, entry] of entries) {
+    const { card, hasTikTokEmbed } = buildCard(entryId, entry);
+    if (hasTikTokEmbed) anyTikTok = true;
+    grid.appendChild(card);
+  }
+
+  gridObserver = watchForEmbedIframes(grid);
+  // One script load processes every TikTok blockquote currently in the grid;
+  // likewise one process() call picks up every Instagram blockquote.
+  if (anyTikTok) loadTikTokEmbedScript();
+  processInstagramEmbeds();
+}
+
 export function render(room, ctx) {
   const round = room.round;
   const roundData = room.rounds?.[round] || {};
   const submissions = roundData.submissions || {};
   const entries = Object.entries(submissions); // [entryId, entry][]
-  const presentIndex = Math.min(roundData.presentIndex || 0, Math.max(entries.length - 1, 0));
   const revealAttribution = !!roundData.revealAttribution;
 
   if (presenterRound !== round) {
@@ -93,20 +116,6 @@ export function render(room, ctx) {
 
   if (!bound) {
     bound = true;
-    document.getElementById('presenter-prev-btn').addEventListener('click', () => {
-      const r = window.__totcCurrentRoom;
-      const data = r.rounds?.[r.round] || {};
-      const total = Object.keys(data.submissions || {}).length;
-      const idx = Math.max(0, (data.presentIndex || 0) - 1);
-      if (total > 0) setPresentIndex(ctx.code, r.round, idx);
-    });
-    document.getElementById('presenter-next-btn').addEventListener('click', () => {
-      const r = window.__totcCurrentRoom;
-      const data = r.rounds?.[r.round] || {};
-      const total = Object.keys(data.submissions || {}).length;
-      const idx = Math.min(total - 1, (data.presentIndex || 0) + 1);
-      if (total > 0) setPresentIndex(ctx.code, r.round, idx);
-    });
     document.getElementById('attribution-toggle').addEventListener('change', e => {
       const r = window.__totcCurrentRoom;
       setRevealAttribution(ctx.code, r.round, e.target.checked);
@@ -127,17 +136,21 @@ export function render(room, ctx) {
     });
   }
 
-  const [currentEntryId, currentEntry] = entries[presentIndex] || [];
-  renderCard(currentEntryId, currentEntry, revealAttribution);
+  const entryIdsKey = entries.map(([id]) => id).sort().join(',');
+  if (entryIdsKey !== renderedEntryIds) {
+    renderedEntryIds = entryIdsKey;
+    renderGrid(entries);
+  }
+
+  document.querySelectorAll('#presenter-grid .presenter-card').forEach(card => {
+    const entry = submissions[card.dataset.entryId];
+    if (entry) renderContributors(card, entry, revealAttribution);
+  });
 
   document.getElementById('host-presenter-controls').classList.toggle('hidden', !ctx.isHost);
   document.getElementById('guest-watching-note').classList.toggle('hidden', ctx.isHost);
 
   if (ctx.isHost) {
-    document.getElementById('presenter-position').textContent =
-      entries.length ? `${presentIndex + 1} of ${entries.length}` : '0 of 0';
-    document.getElementById('presenter-prev-btn').disabled = presentIndex <= 0;
-    document.getElementById('presenter-next-btn').disabled = presentIndex >= entries.length - 1;
     document.getElementById('attribution-toggle').checked = revealAttribution;
     if (!startingVoting) {
       document.getElementById('start-voting-btn').disabled = entries.length === 0;

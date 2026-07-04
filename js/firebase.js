@@ -144,7 +144,6 @@ export async function startRound(code, round) {
     round,
     [`rounds.${round}`]: {
       startedAt: serverTimestamp(),
-      presentIndex: 0,
       revealAttribution: false,
       playerSubmissions: {},
       submissions: {},
@@ -167,12 +166,7 @@ export async function closeSubmissionsAndCompile(code, round, mergedEntries) {
   await withTimeout(updateDoc(roomRef(code), {
     status: 'compiling',
     [`rounds.${round}.submissions`]: mergedEntries,
-    [`rounds.${round}.presentIndex`]: 0,
   }));
-}
-
-export async function setPresentIndex(code, round, index) {
-  await withTimeout(updateDoc(roomRef(code), { [`rounds.${round}.presentIndex`]: index }));
 }
 
 export async function setRevealAttribution(code, round, revealed) {

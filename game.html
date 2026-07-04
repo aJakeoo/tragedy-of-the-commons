@@ -29,26 +29,19 @@
     </div>
   </section>
 
-  <!-- COMPILING (host presenter) -->
+  <!-- COMPILING (all clips visible at once — see js/presenter.js) -->
   <section id="phase-compiling" class="hidden">
-    <div class="card presenter-card" id="presenter-card"></div>
+    <div id="presenter-grid" class="presenter-grid"></div>
 
-    <div id="host-presenter-controls" class="hidden">
-      <div class="presenter-nav">
-        <button id="presenter-prev-btn">&larr; Prev</button>
-        <span class="muted" id="presenter-position"></span>
-        <button id="presenter-next-btn">Next &rarr;</button>
-      </div>
-      <div class="row between" style="margin-top:1rem">
-        <label class="row" style="margin:0">
-          <input type="checkbox" id="attribution-toggle" style="width:auto;margin-right:0.5rem">
-          Show who submitted each clip
-        </label>
-      </div>
+    <div id="host-presenter-controls" class="card hidden">
+      <label class="row" style="margin:0">
+        <input type="checkbox" id="attribution-toggle" style="width:auto;margin-right:0.5rem">
+        Show who submitted each clip
+      </label>
       <button class="primary" id="start-voting-btn" style="margin-top:1rem">Start voting</button>
     </div>
 
-    <p class="muted hidden" id="guest-watching-note">Watching along &mdash; the host is driving this screen.</p>
+    <p class="muted hidden" id="guest-watching-note">Tap any clip to play it. The host will start voting when everyone's seen the round.</p>
   </section>
 
   <!-- VOTING -->

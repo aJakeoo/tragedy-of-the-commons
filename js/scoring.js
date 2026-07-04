@@ -42,19 +42,37 @@ export function multiplierFor(entry) {
 }
 
 // Tallies weighted totals and produces a rank-sorted list (competition
-// ranking: ties share a rank, next rank skips accordingly).
+// ranking: ties share a rank, next rank skips accordingly). Also returns,
+// per entry, which voters contributed how many raw points — the reveal
+// animation shows this breakdown ("Tommy +4, Randy +2") rather than just an
+// abstract total. Voter identity here is intentionally always included:
+// it's a separate concern from the presenter phase's submitter-attribution
+// toggle, which only ever hides who *submitted* a clip, not who *voted* for
+// it — voter identity is public at reveal time regardless of that toggle.
 //
 // submissions: { [entryId]: { ...entry, contributors } }
 // ballots: { [playerId]: { [entryId]: points } }
+// returns each result with `voterBreakdown: [{ playerId, points }]`, sorted
+// by points descending — resolving playerId to a display name is left to
+// the caller (reveal.js), which has access to the room's player list.
 export function tallyResults(submissions, ballots) {
   const totals = {};
-  for (const entryId of Object.keys(submissions)) totals[entryId] = 0;
+  const breakdowns = {};
+  for (const entryId of Object.keys(submissions)) {
+    totals[entryId] = 0;
+    breakdowns[entryId] = [];
+  }
 
-  for (const ballot of Object.values(ballots || {})) {
+  for (const [voterId, ballot] of Object.entries(ballots || {})) {
     for (const [entryId, points] of Object.entries(ballot || {})) {
       if (!(entryId in totals) || !points) continue;
-      totals[entryId] += Number(points);
+      const pts = Number(points);
+      totals[entryId] += pts;
+      breakdowns[entryId].push({ playerId: voterId, points: pts });
     }
+  }
+  for (const entryId of Object.keys(breakdowns)) {
+    breakdowns[entryId].sort((a, b) => b.points - a.points);
   }
 
   const results = Object.entries(submissions).map(([entryId, entry]) => {
@@ -66,6 +84,7 @@ export function tallyResults(submissions, ballots) {
       multiplier,
       rawPoints,
       weightedPoints: rawPoints * multiplier,
+      voterBreakdown: breakdowns[entryId],
     };
   });
 
