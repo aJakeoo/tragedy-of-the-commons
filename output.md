@@ -413,3 +413,54 @@ so left as-is rather than over-designing a fix for what turned out to be a
 screenshot-legibility issue, not a real bug. Also replaced the three pages'
 stale "Placeholder UI — visual design pass comes later" footer text, since
 the design pass had, at that point, actually happened.
+
+## Session 6 — Presenter sizing, mute limitation, voting UI, attribution default
+
+User feedback after using the design-passed build: attribution should
+default to visible (already changed this session, confirmed to stay), the
+presenter screen's clips should be much bigger — "like scrolling a TikTok
+playlist" — and repeatedly tapping a per-clip unmute control across many
+clips is a lot of friction; also requested the point-budget voting UI use
++/- buttons instead of typing a number, matching the original mockup.
+
+**Presenter sizing:** `.presenter-grid` now breaks out of the page's
+centered 720px column with the standard full-bleed trick
+(`width:100vw; margin-left:calc(50% - 50vw)`), one clip per row, embed
+height up to 90vh. This introduced a real, easy-to-miss bug: on any page
+tall enough to need a vertical scrollbar, Chrome measures `100vw` as
+*including* the scrollbar's own width, producing a spurious few-pixel
+horizontal scrollbar. Fixed with `overflow-x: hidden` on `html` (the
+standard fix for this specific quirk). Confirmed fixed via screenshot
+before/after. Full edge-to-edge width is mainly achieved on phone-width
+viewports; TikTok/Instagram's embeds enforce their own internal max-width
+(~600-640px) that can't be overridden from outside the iframe, so on wide
+desktop screens the clip still centers at that platform-imposed size —
+flagged to the user rather than silently under-delivering.
+
+**Auto-unmute — investigated and confirmed not possible:** checked the raw
+TikTok oEmbed response directly (`curl`) for any mute/sound-related iframe
+parameter or data attribute — there is none; the actual `<iframe>` is built
+entirely by TikTok's own `embed.js` with no configurability exposed to the
+embedding page. Combined with the iframe being cross-origin (no
+`postMessage` control API, confirmed back in the single-audio-enforcement
+work), there is no client-side way to click or otherwise control TikTok's
+internal mute button. This is a hard platform/browser security boundary, not
+a gap in this implementation — didn't build a fake "auto-unmute" that
+would silently not work. Added a plain-language hint next to the presenter
+grid instead ("tap the speaker icon on the clip itself to turn on sound")
+so the host at least knows what to expect.
+
+**Voting UI:** replaced the `<input type="number">` point entry with
+circular +/- buttons and a live point display (`js/voting.js`,
+`.point-btn`/`.points-control` in CSS), matching the mockup. Buttons
+disable at the natural limits (can't go below 0, can't exceed remaining
+budget) instead of relying on `min`/`max` input attributes a user could
+still type past.
+
+**Verified:** submitted a clip, ran it through to the presenter screen, and
+confirmed via screenshot that the horizontal-scrollbar bug was real before
+the `overflow-x` fix and gone after. Did not get to a full live pass on the
+voting +/- buttons or a multi-clip presenter round in this session — hit a
+session-level tool rate limit partway through and prioritized shipping the
+already-implemented, low-risk changes over further live verification.
+Worth a quick manual check next session if anything looks off.

@@ -5,9 +5,14 @@ import { showPhaseError } from './uiError.js';
 let draft = {}; // { [entryId]: points }
 let boundRound = null;
 
-function renderEntries(entries, budget, ctx) {
+function budgetSpent() {
+  return Object.values(draft).reduce((sum, v) => sum + (Number(v) || 0), 0);
+}
+
+function renderEntries(entries, budget) {
   const container = document.getElementById('ballot-entries');
   container.innerHTML = '';
+  const remaining = budget - budgetSpent();
 
   entries.forEach(([entryId, entry]) => {
     const div = document.createElement('div');
@@ -31,36 +36,48 @@ function renderEntries(entries, budget, ctx) {
     link.textContent = 'Open clip';
     div.appendChild(link);
 
+    const points = draft[entryId] || 0;
+
     const row = document.createElement('div');
-    row.className = 'row';
-    const label = document.createElement('label');
-    label.textContent = 'Points:';
-    label.style.margin = '0';
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.min = '0';
-    input.max = String(budget);
-    input.className = 'points-input';
-    input.value = draft[entryId] || 0;
-    input.addEventListener('input', () => {
-      const val = Math.max(0, parseInt(input.value, 10) || 0);
-      draft[entryId] = val;
-      updateBudgetDisplay(entries, budget);
+    row.className = 'points-control';
+
+    const decBtn = document.createElement('button');
+    decBtn.type = 'button';
+    decBtn.className = 'point-btn';
+    decBtn.textContent = '–';
+    decBtn.disabled = points <= 0;
+    decBtn.setAttribute('aria-label', 'Remove a point');
+    decBtn.addEventListener('click', () => {
+      if (draft[entryId] > 0) draft[entryId]--;
+      renderEntries(entries, budget);
+      updateBudgetDisplay(budget);
     });
-    row.append(label, input);
+
+    const pointsDisplay = document.createElement('span');
+    pointsDisplay.className = 'points-display';
+    pointsDisplay.textContent = points;
+
+    const incBtn = document.createElement('button');
+    incBtn.type = 'button';
+    incBtn.className = 'point-btn';
+    incBtn.textContent = '+';
+    incBtn.disabled = remaining <= 0;
+    incBtn.setAttribute('aria-label', 'Add a point');
+    incBtn.addEventListener('click', () => {
+      if (budget - budgetSpent() > 0) draft[entryId] = (draft[entryId] || 0) + 1;
+      renderEntries(entries, budget);
+      updateBudgetDisplay(budget);
+    });
+
+    row.append(decBtn, pointsDisplay, incBtn);
     div.appendChild(row);
 
     container.appendChild(div);
   });
 }
 
-function budgetSpent() {
-  return Object.values(draft).reduce((sum, v) => sum + (Number(v) || 0), 0);
-}
-
-function updateBudgetDisplay(entries, budget) {
-  const spent = budgetSpent();
-  const remaining = budget - spent;
+function updateBudgetDisplay(budget) {
+  const remaining = budget - budgetSpent();
   const el = document.getElementById('budget-remaining');
   el.textContent = `${remaining} / ${budget}`;
   el.classList.toggle('over', remaining < 0);
@@ -87,8 +104,8 @@ export function render(room, ctx) {
     revealBtn.textContent = 'Reveal results';
   }
 
-  renderEntries(eligible, budget, ctx);
-  updateBudgetDisplay(eligible, budget);
+  renderEntries(eligible, budget);
+  updateBudgetDisplay(budget);
 
   const submitBtn = document.getElementById('submit-ballot-btn');
   submitBtn.onclick = async () => {

@@ -33,6 +33,12 @@
 
 * { box-sizing: border-box; }
 
+/* 100vw (used by the presenter grid's full-bleed layout below) is measured
+   including the vertical scrollbar's own width in most browsers, which
+   otherwise causes a spurious few-pixel horizontal scrollbar on any page
+   tall enough to need one. This is the standard fix. */
+html { overflow-x: hidden; }
+
 body {
   font-family: var(--font-body);
   margin: 0;
@@ -219,14 +225,23 @@ label {
 .link-slot .status.checking { color: var(--color-text-muted); }
 
 /* Compiled list / presenter — every clip shows at once, see js/presenter.js.
-   One clip per row so each video reads as the main event on screen (these
-   are portrait 9:16 clips, so height — not width — is what makes a clip
-   feel "big"; a wide multi-column grid was making them look like thumbnails). */
+   The grid breaks out of the page's centered 720px column to use the full
+   viewport width — one clip per row, scrolling like a native TikTok/Reels
+   feed, rather than a card sitting in a narrow reading column. Height
+   follows each platform's own portrait aspect ratio; TikTok/Instagram's
+   embeds also enforce their own internal max-width (~600-640px) that this
+   can't override, so on a wide desktop viewport the clip still centers at
+   that platform-imposed size — full-bleed mainly pays off on phone-width
+   screens, which is most play sessions for this game. */
 .presenter-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 1.5rem;
-  margin-bottom: 1rem;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+  width: 100vw;
+  max-width: 100vw;
+  margin-left: calc(50% - 50vw);
+  padding-inline: 0.5rem;
 }
 .presenter-card {
   text-align: center;
@@ -234,14 +249,14 @@ label {
   border-radius: var(--radius-lg);
   padding: 0.9rem;
   background: var(--color-card);
-  max-width: 480px;
-  margin-inline: auto;
   width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
 }
-.presenter-card img { max-width: 100%; max-height: 85vh; width: auto; object-fit: contain; border-radius: var(--radius-sm); }
-.presenter-embed { display: flex; justify-content: center; max-height: 85vh; overflow-y: auto; border-radius: var(--radius-sm); }
-.presenter-embed iframe { max-width: 100%; min-height: 70vh; }
-.presenter-embed blockquote.instagram-media { max-width: 100% !important; min-width: 0 !important; }
+.presenter-card img { max-width: 100%; max-height: 90vh; width: 100%; object-fit: contain; border-radius: var(--radius-sm); }
+.presenter-embed { display: flex; justify-content: center; max-height: 90vh; overflow-y: auto; border-radius: var(--radius-sm); }
+.presenter-embed iframe { width: 100%; max-width: 100%; min-height: 75vh; }
+.presenter-embed blockquote.instagram-media { max-width: 100% !important; min-width: 0 !important; width: 100% !important; }
 .contributor-tag, .weight-badge {
   display: inline-block;
   border-radius: 999px;
@@ -261,9 +276,35 @@ label {
 /* Voting */
 .ballot-entry { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 0.9rem; margin-bottom: 0.6rem; background: var(--color-card); }
 .ballot-entry.disabled { opacity: 0.5; }
-.ballot-entry .points-input { width: 4rem; text-align: center; }
 .budget-remaining { font-family: var(--font-display); font-weight: 600; font-size: 1.6rem; color: var(--color-accent); }
 .budget-remaining.over { color: var(--color-error); }
+
+.points-control { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.6rem; }
+.point-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-accent);
+  color: var(--color-surface);
+  flex-shrink: 0;
+}
+.point-btn:hover { background: var(--color-accent-dark); }
+.point-btn:disabled { background: var(--color-border-soft); color: var(--color-text-faint); }
+.points-display {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  color: var(--color-text);
+  width: 1.5rem;
+  text-align: center;
+}
 
 /* Reveal */
 .reveal-list { list-style: none; padding: 0; }
