@@ -1,9 +1,8 @@
 import { setRevealAttribution, startVoting } from './firebase.js';
 import { showPhaseError } from './uiError.js';
 import {
-  buildTikTokBlockquote,
+  buildTikTokPlayer,
   buildInstagramBlockquote,
-  loadTikTokEmbedScript,
   processInstagramEmbeds,
   registerEmbedCard,
   resetKnownEmbeds,
@@ -32,14 +31,13 @@ function buildCard(entryId, entry) {
     platform: entry.platform,
     embedHtml: entry.embedHtml,
     url: entry.url,
+    canonicalId: entry.canonicalId,
   });
 
-  let hasTikTokEmbed = false;
-  if (entry.platform === 'tiktok' && entry.embedHtml) {
-    embedContainer.appendChild(buildTikTokBlockquote(entry.embedHtml));
-    hasTikTokEmbed = true;
+  if (entry.platform === 'tiktok' && entry.canonicalId) {
+    embedContainer.appendChild(buildTikTokPlayer(embedContainer));
   } else {
-    // Instagram links (and a TikTok entry with no embed HTML for some
+    // Instagram links (and a TikTok entry with no video ID for some
     // reason) fall back to Instagram's own embed widget.
     embedContainer.appendChild(buildInstagramBlockquote(entry.url));
   }
@@ -54,7 +52,7 @@ function buildCard(entryId, entry) {
   contributorsWrap.className = 'presenter-contributors';
   card.appendChild(contributorsWrap);
 
-  return { card, hasTikTokEmbed };
+  return card;
 }
 
 function renderContributors(card, entry, revealAttribution) {
@@ -98,16 +96,13 @@ function renderGrid(entries) {
     return;
   }
 
-  let anyTikTok = false;
   for (const [entryId, entry] of entries) {
-    const { card, hasTikTokEmbed } = buildCard(entryId, entry);
-    if (hasTikTokEmbed) anyTikTok = true;
-    grid.appendChild(card);
+    grid.appendChild(buildCard(entryId, entry));
   }
 
-  // One script load processes every TikTok blockquote currently in the grid;
-  // likewise one process() call picks up every Instagram blockquote.
-  if (anyTikTok) loadTikTokEmbedScript();
+  // TikTok clips render as self-contained Embed Player iframes (see
+  // embeds.js) — no loader script needed. One process() call still picks up
+  // every Instagram blockquote in the grid.
   processInstagramEmbeds();
 }
 

@@ -464,3 +464,98 @@ voting +/- buttons or a multi-clip presenter round in this session — hit a
 session-level tool rate limit partway through and prioritized shipping the
 already-implemented, low-risk changes over further live verification.
 Worth a quick manual check next session if anything looks off.
+
+## Session 7 — TikTok Embed Player, and why auto-unmute still doesn't fully work
+
+User asked for a specific, researched follow-up on Session 6's "no
+postMessage API" finding: TikTok separately documents a real **Embed
+Player** (`https://www.tiktok.com/player/v1/{id}`), distinct from the
+oEmbed blockquote used everywhere else, with query-param configuration and
+a postMessage control channel. Verified the exact wire format directly
+against `developers.tiktok.com/doc/embed-player` before writing any code
+(worth doing — the user's brief guessed a plausible-but-wrong shape):
+messages need `{'x-tiktok-player': true, type, value}`, not just
+`{type, value}`, and `onPlayerError`'s payload is `{errorCode, errorType}`,
+not the flat `{code}` the brief assumed. `onStateChange` sends a bare
+numeric code (1 = playing, 2 = paused, 3 = buffering).
+
+**What changed:** `js/embeds.js` now builds TikTok clips as
+`<iframe src=".../player/v1/{canonicalId}?autoplay=1&muted=1&rel=0">`
+instead of the oEmbed blockquote (`buildTikTokPlayer`, wired in from
+`presenter.js` using the `canonicalId` already captured at submission time
+in `linkValidation.js`). The blockquote path (`buildTikTokBlockquote`,
+`loadTikTokEmbedScript`) is kept only as a fallback. A `message` listener
+tracks `onPlayerReady`/`onStateChange`/`onPlayerError` per iframe
+(`cardInfo` map, keyed by embed container). Switching which clip is
+"active" (via the existing focus/blur trick from Session 4 — tapping into
+a card's iframe steals window focus) now sends `pause`+`mute` to the
+previously-active TikTok clip over postMessage instead of tearing it down
+and rebuilding it, and sends `unMute` to the newly-active one. Instagram
+clips are untouched — still oEmbed blockquote, still tap-to-play, still
+torn down and rebuilt to stop (no control API exists for it, confirmed
+again this session, not attempted). A TikTok clip whose player reports
+`onPlayerError` with `errorCode 3002` (AUTOPLAY_ERROR) falls back
+permanently to its own blockquote embed rather than getting stuck.
+
+**Confirmed working, live, against the real player (not just code
+review):**
+- The postMessage channel itself — sent a manual `unMute` and got real
+  `onMute`/`onVolumeChange` events back, exact shape matching the docs.
+- `onPlayerReady` fires for every TikTok clip.
+- Non-active TikTok clips correctly end up paused + muted shortly after
+  render (confirmed two ways: the message trace, and visually — TikTok's
+  own native control bar showed a play triangle + muted-speaker icon on
+  the backgrounded clip).
+- Switching active clip via a real click into a different card's iframe
+  correctly sends `pause`+`mute` to the old one and attempts `unMute` on
+  the new one — no more ~10-18s rebuild penalty for TikTok-to-TikTok
+  switches, which was Session 4's documented cost of the old approach.
+- TikTok clips now autoplay (muted) immediately on render — no tap needed
+  just to start playback, unlike the old blockquote embed.
+
+**Confirmed NOT reliably working — the actual auto-unmute:** traced the
+raw postMessage events directly. The `unMute` command reaches the player
+and briefly succeeds (`onMute:false` fires), then gets silently reverted
+about 2ms later (`onMute:true`), with no error event to react to — so the
+3002/AUTOPLAY_ERROR fallback never fires for this case, it just ends up
+muted. This reproduced consistently across multiple fresh rounds, and
+still happened after a genuine, focus-confirmed real click directly into
+that specific clip's iframe — so it isn't simply "the default clip needs
+its own tap." Best explanation: user activation (the "a real interaction
+authorized this") does not propagate through `postMessage`. A `message`
+event handler is never treated as a gesture by the browser, so even though
+TikTok's own script is the one calling `unMute`, the browser's
+audio-unmute policy can still block/revert it because the call didn't
+originate from a synchronous, in-frame click. This is a browser platform
+constraint one layer up from Session 6's "no control API at all" finding,
+not a bug in this implementation, and not something client code can route
+around — confirmed via `navigator.userActivation` on the host page
+(`hasBeenActive: true` after the click, but that doesn't help — the async
+postMessage hop is what breaks it, not lack of a real click). Left the
+`unMute` attempt in (harmless, may work on browsers with different
+policies) but rewrote `game.html`'s hint text to stop promising automatic
+sound — it now says clips start muted and to tap the speaker icon, which
+is the fallback that reliably works (a first-party click, not a relayed
+one).
+
+Also chased what looked like a sizing regression — the TikTok Embed Player
+iframe rendered at 546.8px tall, which looked short next to the `75vh`
+Session 6 sizing rule. Turned out to be correct: 546.8px *is* 75% of this
+browser's real 729px CSS viewport height. The confusion was comparing
+against the screenshot tool's 896px capture height, which runs at a
+different scale (~1.23x) than actual CSS pixels — cost some wasted clicks
+earlier in the session before catching this (several manual test clicks
+landed on the wrong element until the scale mismatch was found via
+`window.innerWidth` vs. screenshot width). No actual bug, no fix needed.
+
+**Also verified this session (closing out Session 6's deferred item):**
+the voting screen's +/- buttons, live, in a real 2-player round —
+increment, decrement, the budget cap disabling `+` at the limit, `-`
+disabling at 0, and ballot submission all work correctly.
+
+**QA method note:** used two real, live public TikTok videos
+(`@scout2015/video/6718335390845095173`, `@sulheejessica/video/7319529423311621406`)
+verified via direct oEmbed calls, plus a syntactically-valid but
+non-existent Instagram Reel URL — sufficient for Instagram since that
+platform's link validation is format-only by design (no liveness check
+possible, see Session 1).
