@@ -6,22 +6,21 @@ import {
   processInstagramEmbeds,
   registerEmbedCard,
   resetKnownEmbeds,
+  activateContainer,
+  enableSound,
+  isSoundEnabled,
 } from './embeds.js';
 
 let bound = false;
 let startingVoting = false;
 let presenterRound = null;
-let renderedEntryIds = null; // sorted, joined — identifies the current grid's contents
+let renderedEntryIds = null; // sorted, joined — identifies the current feed's contents
+let feedObserver = null;
 
 function buildCard(entryId, entry) {
   const card = document.createElement('div');
   card.className = 'presenter-card';
   card.dataset.entryId = entryId;
-
-  const badge = document.createElement('p');
-  badge.className = 'muted';
-  badge.textContent = entry.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels';
-  card.appendChild(badge);
 
   const embedContainer = document.createElement('div');
   embedContainer.className = 'presenter-embed';
@@ -42,15 +41,26 @@ function buildCard(entryId, entry) {
     embedContainer.appendChild(buildInstagramBlockquote(entry.url));
   }
 
+  // TikTok-style overlay chrome on top of the clip: platform badge up top,
+  // caption block (title + contributors) pinned to the bottom. All
+  // pointer-events:none in CSS so taps land on the clip underneath.
+  const badge = document.createElement('p');
+  badge.className = 'feed-badge';
+  badge.textContent = entry.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels';
+  card.appendChild(badge);
+
+  const caption = document.createElement('div');
+  caption.className = 'feed-caption';
   if (entry.title) {
     const title = document.createElement('p');
+    title.className = 'feed-title';
     title.textContent = entry.title;
-    card.appendChild(title);
+    caption.appendChild(title);
   }
-
   const contributorsWrap = document.createElement('div');
   contributorsWrap.className = 'presenter-contributors';
-  card.appendChild(contributorsWrap);
+  caption.appendChild(contributorsWrap);
+  card.appendChild(caption);
 
   return card;
 }
@@ -70,7 +80,7 @@ function renderContributors(card, entry, revealAttribution) {
     });
   } else {
     const hidden = document.createElement('span');
-    hidden.className = 'muted';
+    hidden.className = 'feed-hidden-note';
     hidden.textContent = 'Submitted by: hidden';
     wrap.appendChild(hidden);
   }
@@ -83,26 +93,54 @@ function renderContributors(card, entry, revealAttribution) {
   }
 }
 
-// Rebuilds the whole grid — only called when the actual set of entries for
+// Whichever card the feed has snapped to becomes the active (audible) clip.
+// scroll-snap guarantees one card fills the feed viewport at rest, so a
+// 0.6 visibility threshold cleanly identifies it mid-scroll too.
+function observeFeed(feed) {
+  feedObserver?.disconnect();
+  feedObserver = new IntersectionObserver(
+    obsEntries => {
+      for (const e of obsEntries) {
+        if (e.isIntersecting) {
+          const container = e.target.querySelector('.presenter-embed');
+          if (container) activateContainer(container);
+        }
+      }
+    },
+    { root: feed, threshold: 0.6 }
+  );
+  feed.querySelectorAll('.presenter-card').forEach(card => feedObserver.observe(card));
+}
+
+// Rebuilds the whole feed — only called when the actual set of entries for
 // this round changes, not on every snapshot (e.g. toggling attribution
 // shouldn't reload every embed and reset any playback in progress).
 function renderGrid(entries) {
-  const grid = document.getElementById('presenter-grid');
-  grid.innerHTML = '';
+  const feed = document.getElementById('presenter-grid');
+  feed.innerHTML = '';
   resetKnownEmbeds();
+  feedObserver?.disconnect();
+  feedObserver = null;
+
+  const soundBtn = document.getElementById('feed-sound-btn');
+  const hasTikTokPlayer = entries.some(
+    ([, entry]) => entry.platform === 'tiktok' && entry.canonicalId
+  );
+  soundBtn.classList.toggle('hidden', !hasTikTokPlayer || isSoundEnabled());
 
   if (entries.length === 0) {
-    grid.innerHTML = '<p class="muted">No clips were submitted this round.</p>';
+    feed.innerHTML = '<p class="feed-empty">No clips were submitted this round.</p>';
     return;
   }
 
   for (const [entryId, entry] of entries) {
-    grid.appendChild(buildCard(entryId, entry));
+    feed.appendChild(buildCard(entryId, entry));
   }
+  observeFeed(feed);
 
   // TikTok clips render as self-contained Embed Player iframes (see
   // embeds.js) — no loader script needed. One process() call still picks up
-  // every Instagram blockquote in the grid.
+  // every Instagram blockquote in the feed.
   processInstagramEmbeds();
 }
 
@@ -140,6 +178,16 @@ export function render(room, ctx) {
         btn.textContent = 'Start voting';
         showPhaseError(err);
       }
+    });
+    const soundBtn = document.getElementById('feed-sound-btn');
+    soundBtn.addEventListener('click', () => {
+      enableSound();
+      soundBtn.classList.add('hidden');
+    });
+    // Fires when sound gets enabled some other way (e.g. the user tapped a
+    // player's own speaker icon) — the button is then redundant.
+    window.addEventListener('totc-sound-enabled', () => {
+      soundBtn.classList.add('hidden');
     });
   }
 

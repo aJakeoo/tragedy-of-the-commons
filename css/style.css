@@ -224,39 +224,118 @@ label {
 .link-slot .status.bad { color: var(--color-error); }
 .link-slot .status.checking { color: var(--color-text-muted); }
 
-/* Compiled list / presenter — every clip shows at once, see js/presenter.js.
-   The grid breaks out of the page's centered 720px column to use the full
-   viewport width — one clip per row, scrolling like a native TikTok/Reels
-   feed, rather than a card sitting in a narrow reading column. Height
-   follows each platform's own portrait aspect ratio; TikTok/Instagram's
-   embeds also enforce their own internal max-width (~600-640px) that this
-   can't override, so on a wide desktop viewport the clip still centers at
-   that platform-imposed size — full-bleed mainly pays off on phone-width
-   screens, which is most play sessions for this game. */
-.presenter-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 2rem;
-  margin-bottom: 1.5rem;
+/* Compiled presenter — a TikTok-style vertical feed, see js/presenter.js.
+   Breaks out of the page's centered 720px column to full viewport width, on
+   a dark stage. The feed itself is a fixed-height scroll-snap container:
+   each clip is one full-height slide, snapping one at a time like the real
+   TikTok FYP; an IntersectionObserver marks the snapped clip active
+   (audible). Overlay chrome (platform badge, caption/contributors) floats
+   on top of the clip. TikTok/Instagram embeds enforce their own internal
+   max-width, so on desktop the clip centers as a portrait column — same as
+   tiktok.com's own desktop feed. */
+.presenter-feed-wrap {
+  position: relative;
   width: 100vw;
-  max-width: 100vw;
   margin-left: calc(50% - 50vw);
-  padding-inline: 0.5rem;
+  margin-bottom: 1.5rem;
+  background: oklch(16% 0.015 50);
+}
+.presenter-feed {
+  height: 84dvh;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  overscroll-behavior-y: contain;
+  scrollbar-width: none;
+}
+.presenter-feed::-webkit-scrollbar { display: none; }
+.presenter-feed .feed-empty {
+  color: oklch(80% 0.02 70);
+  text-align: center;
+  padding: 3rem 1rem;
 }
 .presenter-card {
-  text-align: center;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 0.9rem;
-  background: var(--color-card);
-  width: 100%;
-  max-width: 720px;
-  margin-inline: auto;
+  position: relative;
+  height: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
-.presenter-card img { max-width: 100%; max-height: 90vh; width: 100%; object-fit: contain; border-radius: var(--radius-sm); }
-.presenter-embed { display: flex; justify-content: center; max-height: 90vh; overflow-y: auto; border-radius: var(--radius-sm); }
-.presenter-embed iframe { width: 100%; max-width: 100%; min-height: 75vh; }
-.presenter-embed blockquote.instagram-media { max-width: 100% !important; min-width: 0 !important; width: 100% !important; }
+.presenter-embed {
+  height: 100%;
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.presenter-embed::-webkit-scrollbar { display: none; }
+.presenter-embed iframe { width: 100%; height: 100%; border: none; }
+.presenter-embed blockquote.instagram-media {
+  max-width: 100% !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  max-height: 100%;
+  overflow-y: auto;
+}
+/* Overlay chrome — pointer-events off so taps/scrolls reach the clip. */
+.feed-badge {
+  position: absolute;
+  top: 0.8rem;
+  left: 1rem;
+  z-index: 2;
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: oklch(92% 0.02 70 / 0.9);
+  text-shadow: 0 1px 4px oklch(0% 0 0 / 0.6);
+  pointer-events: none;
+}
+.feed-caption {
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  bottom: 0.9rem;
+  z-index: 2;
+  text-align: left;
+  pointer-events: none;
+}
+.feed-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: oklch(96% 0.01 70);
+  text-shadow: 0 1px 4px oklch(0% 0 0 / 0.7);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.feed-hidden-note {
+  font-size: 0.75rem;
+  color: oklch(85% 0.02 70 / 0.85);
+  text-shadow: 0 1px 4px oklch(0% 0 0 / 0.6);
+}
+.feed-sound-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  z-index: 5;
+  border-radius: 999px;
+  padding: 0.7rem 1.4rem;
+  font-size: 0.9rem;
+  background: oklch(98% 0.015 80 / 0.95);
+  border-color: transparent;
+  box-shadow: 0 4px 18px oklch(0% 0 0 / 0.35);
+}
+.feed-sound-btn:hover { background: oklch(98% 0.015 80); }
 .contributor-tag, .weight-badge {
   display: inline-block;
   border-radius: 999px;

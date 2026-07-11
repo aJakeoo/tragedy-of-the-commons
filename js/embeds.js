@@ -1,6 +1,7 @@
-// Renders TikTok/Instagram embeds inline for every clip in a round at once
-// (no next/prev — see presenter.js), and enforces "only one clip plays
-// audibly at a time."
+// Renders TikTok/Instagram embeds as a vertical scroll-snap feed (one clip
+// per screen — see presenter.js) and enforces "only one clip plays audibly
+// at a time." The active clip is whichever card the feed has snapped to
+// (an IntersectionObserver in presenter.js calls activateContainer).
 //
 // TikTok clips use TikTok's official Embed Player
 // (https://www.tiktok.com/player/v1/{id}), not the oEmbed blockquote used
@@ -8,61 +9,128 @@
 // query params (autoplay=1&muted=1) start it automatically without a tap,
 // and a documented postMessage channel (play/pause/mute/unMute) lets the
 // host stop one clip and start another without touching the iframe itself.
-// Verified directly against developers.tiktok.com/doc/embed-player before
-// building this — the message body must include `'x-tiktok-player': true`
-// alongside `type`/`value`, and `onPlayerError`'s payload is
-// `{ errorCode, errorType }` (error 3002/AUTOPLAY_ERROR is the one we
-// actually handle — see fallBackToTapToPlay below).
+// Verified directly against developers.tiktok.com/doc/embed-player — the
+// message body must include `'x-tiktok-player': true` alongside
+// `type`/`value`, and `onPlayerError`'s payload is `{ errorCode, errorType }`
+// (3002 = AUTOPLAY_ERROR).
 //
-// The auto-unmute this enables is a real attempt, not a guaranteed result —
-// tested live against the actual player and confirmed the `unMute` command
-// arrives and briefly takes effect (`onMute:false` fires) but gets silently
-// reverted a couple milliseconds later (`onMute:true`), with no error event
-// to react to. This reproduced even after a genuine, focus-confirmed click
-// directly into that clip's iframe, so it isn't just "needs a real tap."
-// The likely cause is a browser platform constraint, not a bug here: user
-// activation (the "a real tap authorized this") doesn't propagate through
-// `postMessage` — a `message` handler is never treated as a gesture, so the
-// browser's audio-unmute policy can block the relayed unmute even though
-// TikTok's own script is the one calling it. Left in because it's harmless
-// and may work in browsers/versions with different policies, but the UI
-// copy (game.html) doesn't promise it — the honest fallback is still a tap
-// on the clip's own speaker icon, which is a first-party click and works.
+// SOUND: browsers only allow unmuted playback in a cross-origin iframe when
+// the iframe itself has autoplay permission — user activation does NOT
+// propagate through postMessage, so an `unMute` relayed from the host page
+// gets silently reverted by a player that loaded muted before any gesture
+// (confirmed live in Session 7: onMute:false fires, then onMute:true ~2ms
+// later, no error event). What DOES work is Chrome's autoplay-permission
+// delegation: once the top-level page has sticky user activation (any real
+// tap, e.g. the feed's one-time "tap for sound" button) an iframe carrying
+// `allow="autoplay"` that loads AFTER that point may autoplay with sound.
+// So the strategy per active clip once sound is enabled:
+//   1. try the cheap path — postMessage `unMute` (instant when it sticks);
+//   2. watch the player's own onMute events; if the unmute didn't hold
+//      after a grace period, reload that one player iframe with muted=0
+//      (a ~1-2s load, still far cheaper than the old 10-18s blockquote
+//      rebuild) and let it autoplay unmuted under the delegated permission;
+//   3. if even the unmuted reload trips AUTOPLAY_ERROR (3002), drop back to
+//      the known-good muted autoplay for that clip — no retry loop.
 //
 // Instagram has no equivalent. Its oEmbed response is a <blockquote> that
 // Instagram's own embed.js turns into an iframe with zero configurability —
-// no autoplay, no control channel, cross-origin like TikTok's. Instagram
-// clips keep the original tap-to-play-with-sound behavior, and the only way
-// to stop one is still tearing its container down and rebuilding it from
-// the original blockquote markup (see the Session 4 note below) — that
-// applies to any TikTok clip that has fallen back to its own blockquote
-// embed too (see fallBackToTapToPlay), since at that point it's in the same
-// no-control-channel boat as Instagram.
-//
-// The original tear-down approach (before the Embed Player existed) tried
-// resetting `iframe.src = iframe.src` to force a reload on whichever clip
-// was losing focus. That broke TikTok's oEmbed blockquote embed permanently
-// — once reloaded in place, the iframe never recovered (confirmed in
-// testing — it stayed on a blank loading state indefinitely, well past the
-// ~10-15s TikTok's embeds normally take to render). What reliably works
-// instead is tearing the card's embed container back down to the original
-// <blockquote> markup and letting the platform's embed script build a fresh
-// iframe from scratch — the same path used on first render. That's still
-// what `rebuildContainer` below does, now only needed for Instagram and for
-// TikTok clips that have fallen back off the Embed Player.
+// no autoplay, no control channel. Instagram clips keep tap-to-play, and
+// the only way to stop one is still tearing its container down and
+// rebuilding it from the original blockquote markup. (Same applies to a
+// TikTok clip that has fallen back to its own blockquote embed — see
+// fallBackToTapToPlay.) Historical note: resetting `iframe.src` on a
+// blockquote-built embed breaks it permanently (Session 4) — teardown to
+// the original blockquote markup is the only working stop for those. Our
+// own player/v1 iframes are plain URLs we control, so replacing them
+// outright (reloadPlayer below) is safe.
 
 const TIKTOK_PLAYER_ORIGIN = 'https://www.tiktok.com';
 
-const cardInfo = new Map(); // embedContainer -> { platform, embedHtml, url, canonicalId, iframe, ready, fellBack }
+const cardInfo = new Map(); // embedContainer -> per-clip state, see registerEmbedCard
 let activeContainer = null;
 let focusListenerBound = false;
 let tiktokMessageListenerBound = false;
+
+// Sticky for the whole session (not reset per round): once the user has
+// opted into sound with a real tap, later rounds' feeds can load their
+// first clip unmuted straight away with no new tap.
+let soundEnabled = false;
+
+export function isSoundEnabled() {
+  return soundEnabled;
+}
+
+function markSoundEnabled() {
+  if (soundEnabled) return;
+  soundEnabled = true;
+  // Lets the presenter hide its "tap for sound" button, including when the
+  // user unmuted via the player's own speaker icon instead of our button.
+  window.dispatchEvent(new CustomEvent('totc-sound-enabled'));
+}
+
+// Called from a genuine click handler (the feed's sound button) — the tap
+// gives the page sticky user activation, which is what makes an unmuted
+// player reload allowed to autoplay with sound.
+export function enableSound() {
+  markSoundEnabled();
+  const info = cardInfo.get(activeContainer);
+  if (info?.platform === 'tiktok' && info.iframe) {
+    info.reloadedForSound = false;
+    attemptUnmute(activeContainer);
+  }
+}
 
 function postToPlayer(iframe, type, value) {
   iframe?.contentWindow?.postMessage(
     { type, value, 'x-tiktok-player': true },
     TIKTOK_PLAYER_ORIGIN
   );
+}
+
+function playerIframe(canonicalId, muted) {
+  const iframe = document.createElement('iframe');
+  iframe.src = `https://www.tiktok.com/player/v1/${encodeURIComponent(canonicalId)}?autoplay=1&muted=${muted ? 1 : 0}&rel=0`;
+  iframe.allow = 'autoplay; encrypted-media; fullscreen';
+  iframe.allowFullscreen = true;
+  iframe.style.border = 'none';
+  iframe.title = 'TikTok video player';
+  return iframe;
+}
+
+// Swaps in a brand-new player iframe (fresh load = fresh autoplay-policy
+// evaluation, which is the whole point when muted=false).
+function reloadPlayer(container, muted) {
+  const info = cardInfo.get(container);
+  if (!info?.iframe || !info.canonicalId) return;
+  clearTimeout(info.unmuteTimer);
+  info.unmutePending = false;
+  const fresh = playerIframe(info.canonicalId, muted);
+  info.iframe.replaceWith(fresh);
+  info.iframe = fresh;
+  info.ready = false;
+  info.loadedMuted = muted;
+  info.muteState = undefined;
+}
+
+// Cheap unmute first, unmuted reload as the fallback. The player reports
+// its real mute state via onMute events; if it isn't audibly unmuted by the
+// time the grace period ends (covers both "command ignored" and the
+// confirmed unmute-then-instant-revert), reload unmuted — once per
+// activation, never after an unmuted load already failed autoplay.
+function attemptUnmute(container) {
+  const info = cardInfo.get(container);
+  if (!info?.iframe || !info.ready || info.unmutePending) return;
+  info.unmutePending = true;
+  postToPlayer(info.iframe, 'unMute');
+  clearTimeout(info.unmuteTimer);
+  info.unmuteTimer = setTimeout(() => {
+    info.unmutePending = false;
+    if (container !== activeContainer || !soundEnabled) return;
+    if (info.muteState === false) return; // unmute held — done
+    if (info.reloadedForSound || info.soundReloadFailed) return;
+    info.reloadedForSound = true;
+    reloadPlayer(container, false);
+  }, 1200);
 }
 
 function rebuildContainer(container) {
@@ -79,7 +147,9 @@ function rebuildContainer(container) {
 // Stops whatever is playing in `container`, using whichever mechanism
 // matches how it's currently rendered — postMessage for a live TikTok
 // Embed Player, tear-down/rebuild for Instagram or a TikTok clip that has
-// already fallen back to the blockquote embed.
+// already fallen back to the blockquote embed. Pause only, no mute: an
+// already-unmuted player that resumes later via `play` keeps its sound
+// without needing another unmute round-trip.
 function stopContainer(container) {
   const info = cardInfo.get(container);
   if (!info) return;
@@ -88,10 +158,7 @@ function stopContainer(container) {
     // If the player isn't ready yet, there's nothing playing to stop — and
     // its own onPlayerReady handler (below) will pause+mute it on arrival
     // once it sees it isn't the active container.
-    if (info.ready) {
-      postToPlayer(info.iframe, 'pause');
-      postToPlayer(info.iframe, 'mute');
-    }
+    if (info.ready) postToPlayer(info.iframe, 'pause');
     return;
   }
 
@@ -110,13 +177,19 @@ function startContainer(container) {
   if (!info || info.platform !== 'tiktok' || !info.iframe) return;
   if (info.ready) {
     postToPlayer(info.iframe, 'play');
-    postToPlayer(info.iframe, 'unMute');
+    if (soundEnabled) {
+      info.reloadedForSound = false; // fresh activation earns one reload
+      attemptUnmute(container);
+    }
   }
   // If not ready yet, onPlayerReady checks `container === activeContainer`
-  // itself and unmutes on arrival — nothing to queue here.
+  // itself — nothing to queue here.
 }
 
-function activateContainer(container) {
+// The feed's IntersectionObserver (presenter.js) calls this as cards snap
+// into view; the window-blur focus trick below also calls it when the user
+// taps directly into a clip's iframe.
+export function activateContainer(container) {
   if (container === activeContainer || !cardInfo.has(container)) return;
   activeContainer = container;
   for (const c of cardInfo.keys()) {
@@ -161,7 +234,7 @@ function ensureTikTokMessageListener() {
     if (data.type === 'onPlayerReady') {
       info.ready = true;
       if (container === activeContainer) {
-        postToPlayer(info.iframe, 'unMute');
+        if (soundEnabled) attemptUnmute(container);
       } else {
         // A background clip that autoplayed muted on render but never
         // became the active one — stop it now instead of leaving it
@@ -169,14 +242,34 @@ function ensureTikTokMessageListener() {
         postToPlayer(info.iframe, 'pause');
         postToPlayer(info.iframe, 'mute');
       }
+    } else if (data.type === 'onMute') {
+      info.muteState = data.value;
+      // The user unmuting via the player's own speaker icon counts as
+      // opting into sound for the whole feed.
+      if (data.value === false) markSoundEnabled();
     } else if (data.type === 'onStateChange') {
       // 1 = playing. Safety net in case autoplay actually kicks in after
       // onPlayerReady fires (ready just means loaded, not yet playing).
-      if (data.value === 1 && container === activeContainer) {
-        postToPlayer(info.iframe, 'unMute');
+      if (
+        data.value === 1 &&
+        container === activeContainer &&
+        soundEnabled &&
+        info.muteState !== false
+      ) {
+        attemptUnmute(container);
       }
     } else if (data.type === 'onPlayerError') {
-      if (data.value?.errorCode === 3002) fallBackToTapToPlay(container);
+      if (data.value?.errorCode === 3002) {
+        if (info.loadedMuted === false) {
+          // The unmuted reload itself got autoplay-blocked. Go back to the
+          // known-good muted autoplay for this clip and stop trying — the
+          // player's own speaker icon is the remaining path to sound.
+          info.soundReloadFailed = true;
+          reloadPlayer(container, true);
+        } else {
+          fallBackToTapToPlay(container);
+        }
+      }
     }
   });
 }
@@ -188,6 +281,7 @@ function ensureTikTokMessageListener() {
 function fallBackToTapToPlay(container) {
   const info = cardInfo.get(container);
   if (!info || info.fellBack) return;
+  clearTimeout(info.unmuteTimer);
   info.fellBack = true;
   info.iframe = null;
   container.innerHTML = '';
@@ -206,37 +300,46 @@ function fallBackToTapToPlay(container) {
   }
 }
 
-// Call once per card when the grid is (re)built, so this module knows how
+// Call once per card when the feed is (re)built, so this module knows how
 // to rebuild/stop that card's embed later.
 export function registerEmbedCard(container, info) {
   ensureFocusListener();
-  cardInfo.set(container, { ready: false, fellBack: false, iframe: null, ...info });
+  cardInfo.set(container, {
+    ready: false,
+    fellBack: false,
+    iframe: null,
+    loadedMuted: true,
+    muteState: undefined,
+    unmutePending: false,
+    unmuteTimer: 0,
+    reloadedForSound: false,
+    soundReloadFailed: false,
+    ...info,
+  });
 }
 
-// Call once per grid render (after clearing the grid) so stale references
-// from a previous round/render don't linger.
+// Call once per feed render (after clearing it) so stale references from a
+// previous round/render don't linger. soundEnabled deliberately survives —
+// the user's opt-in covers the whole session.
 export function resetKnownEmbeds() {
+  for (const info of cardInfo.values()) clearTimeout(info.unmuteTimer);
   cardInfo.clear();
   activeContainer = null;
 }
 
 // Builds a TikTok Embed Player iframe for the card already registered at
 // `container` (via registerEmbedCard) and wires it into the playback
-// tracking above. autoplay=1&muted=1 is what lets every clip start playing
-// the instant it renders with no tap — muted, so it's silent until it
-// becomes the active clip (the first TikTok card in a round defaults to
-// active; see below).
+// tracking above. Every clip autoplays the moment it renders — muted,
+// except the feed's first clip once the user has already opted into sound
+// (soundEnabled), which loads unmuted directly.
 export function buildTikTokPlayer(container) {
   const info = cardInfo.get(container);
-  const iframe = document.createElement('iframe');
-  iframe.src = `https://www.tiktok.com/player/v1/${encodeURIComponent(info.canonicalId)}?autoplay=1&muted=1&rel=0`;
-  iframe.allow = 'autoplay; encrypted-media; fullscreen';
-  iframe.allowFullscreen = true;
-  iframe.style.border = 'none';
-  iframe.title = 'TikTok video player';
+  const muted = !(soundEnabled && activeContainer === null);
+  const iframe = playerIframe(info.canonicalId, muted);
   info.iframe = iframe;
   info.ready = false;
   info.fellBack = false;
+  info.loadedMuted = muted;
   ensureTikTokMessageListener();
   if (activeContainer === null) activeContainer = container;
   return iframe;
