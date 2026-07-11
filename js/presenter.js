@@ -7,6 +7,7 @@ import {
   registerEmbedCard,
   resetKnownEmbeds,
   activateContainer,
+  deactivateFeed,
   enableSound,
   isSoundEnabled,
 } from './embeds.js';
@@ -16,6 +17,7 @@ let startingVoting = false;
 let presenterRound = null;
 let renderedEntryIds = null; // sorted, joined — identifies the current feed's contents
 let feedObserver = null;
+let feedPoller = 0;
 
 function buildCard(entryId, entry) {
   const card = document.createElement('div');
@@ -93,23 +95,90 @@ function renderContributors(card, entry, revealAttribution) {
   }
 }
 
-// Whichever card the feed has snapped to becomes the active (audible) clip.
-// scroll-snap guarantees one card fills the feed viewport at rest, so a
-// 0.6 visibility threshold cleanly identifies it mid-scroll too.
+// Whichever card the feed has snapped to becomes the active (audible) clip
+// — or, on the end card (which has no embed), everything pauses. Two
+// detection paths, both cheap and idempotent: an IntersectionObserver
+// (0.6 visibility), plus a scroll-position fallback. The fallback matters:
+// IO notifications ride the rendering-frame pipeline, and with several
+// heavy platform iframes running, that pipeline can stall long enough that
+// IO callbacks simply never arrive (observed live in QA) — while plain
+// scroll events still fire. Each card is exactly one feed-viewport tall
+// (CSS), so round(scrollTop / clientHeight) IS the snapped card index.
+function activateCard(card) {
+  const container = card?.querySelector('.presenter-embed');
+  if (container) activateContainer(container);
+  else deactivateFeed(); // snapped to the end card — silence the clips
+}
+
+function activateCardAt(feed, index) {
+  const cards = feed.querySelectorAll('.presenter-card');
+  activateCard(cards[Math.max(0, Math.min(cards.length - 1, index))]);
+}
+
 function observeFeed(feed) {
   feedObserver?.disconnect();
   feedObserver = new IntersectionObserver(
     obsEntries => {
       for (const e of obsEntries) {
-        if (e.isIntersecting) {
-          const container = e.target.querySelector('.presenter-embed');
-          if (container) activateContainer(container);
-        }
+        if (e.isIntersecting && e.intersectionRatio >= 0.6) activateCard(e.target);
       }
     },
     { root: feed, threshold: 0.6 }
   );
   feed.querySelectorAll('.presenter-card').forEach(card => feedObserver.observe(card));
+
+  let scrollTimer = 0;
+  const onSettled = () => {
+    clearTimeout(scrollTimer);
+    activateCardAt(feed, Math.round(feed.scrollTop / feed.clientHeight));
+  };
+  feed.addEventListener('scroll', () => {
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(onSettled, 150);
+  });
+  // scrollend fires once snapping fully settles (Chrome 114+); the timer
+  // above is the fallback for browsers without it.
+  feed.addEventListener('scrollend', onSettled);
+
+  // Last-resort poller: scroll events ALSO ride the rendering pipeline and
+  // were observed going silent right alongside IO during a long renderer
+  // stall — while plain timers kept running. Polling the snap position is
+  // stall-proof, and activateCardAt is a no-op when nothing changed.
+  clearInterval(feedPoller);
+  feedPoller = setInterval(() => {
+    if (!feed.isConnected) {
+      clearInterval(feedPoller);
+      return;
+    }
+    activateCardAt(feed, Math.round(feed.scrollTop / feed.clientHeight));
+  }, 500);
+}
+
+// The final feed slide: after the last clip, snapping down lands on the
+// "what happens next" card — the host's attribution toggle + Start voting
+// button, or the guest's waiting note. Those elements live in game.html
+// (render() below toggles them by id), so they're MOVED into this slide
+// rather than cloned.
+function buildEndCard(entries) {
+  const card = document.createElement('div');
+  card.className = 'presenter-card feed-endcard';
+  const inner = document.createElement('div');
+  inner.className = 'feed-endcard-inner';
+  if (entries.length === 0) {
+    const none = document.createElement('p');
+    none.className = 'feed-empty';
+    none.textContent = 'No clips were submitted this round.';
+    inner.appendChild(none);
+  } else {
+    const done = document.createElement('p');
+    done.className = 'feed-endcard-title';
+    done.textContent = "That's every clip.";
+    inner.appendChild(done);
+  }
+  inner.appendChild(document.getElementById('host-presenter-controls'));
+  inner.appendChild(document.getElementById('guest-watching-note'));
+  card.appendChild(inner);
+  return card;
 }
 
 // Rebuilds the whole feed — only called when the actual set of entries for
@@ -117,10 +186,17 @@ function observeFeed(feed) {
 // shouldn't reload every embed and reset any playback in progress).
 function renderGrid(entries) {
   const feed = document.getElementById('presenter-grid');
+  // The host controls / guest note live inside the end card between
+  // renders — park them back on the section before wiping the feed so
+  // innerHTML='' doesn't destroy them.
+  const phase = document.getElementById('phase-compiling');
+  phase.appendChild(document.getElementById('host-presenter-controls'));
+  phase.appendChild(document.getElementById('guest-watching-note'));
   feed.innerHTML = '';
   resetKnownEmbeds();
   feedObserver?.disconnect();
   feedObserver = null;
+  clearInterval(feedPoller);
 
   const soundBtn = document.getElementById('feed-sound-btn');
   const hasTikTokPlayer = entries.some(
@@ -128,14 +204,10 @@ function renderGrid(entries) {
   );
   soundBtn.classList.toggle('hidden', !hasTikTokPlayer || isSoundEnabled());
 
-  if (entries.length === 0) {
-    feed.innerHTML = '<p class="feed-empty">No clips were submitted this round.</p>';
-    return;
-  }
-
   for (const [entryId, entry] of entries) {
     feed.appendChild(buildCard(entryId, entry));
   }
+  feed.appendChild(buildEndCard(entries));
   observeFeed(feed);
 
   // TikTok clips render as self-contained Embed Player iframes (see

@@ -33,14 +33,14 @@
     </div>
   </section>
 
-  <!-- COMPILING (vertical scroll-snap feed, one clip per screen — see js/presenter.js) -->
+  <!-- COMPILING (full-screen vertical snap feed, one clip per screen; the
+       last slide carries the host's Start-voting controls — see
+       js/presenter.js) -->
   <section id="phase-compiling" class="hidden">
     <div class="presenter-feed-wrap">
       <div id="presenter-grid" class="presenter-feed"></div>
       <button id="feed-sound-btn" class="feed-sound-btn hidden">Tap for sound</button>
     </div>
-
-    <p class="muted" style="text-align:center">Swipe or scroll through the feed &mdash; each TikTok clip plays as it snaps into view. Tap the sound button once and clips keep their sound as you scroll. Instagram clips need a tap to play.</p>
 
     <div id="host-presenter-controls" class="card hidden">
       <label class="row" style="margin:0">
@@ -50,7 +50,7 @@
       <button class="primary" id="start-voting-btn" style="margin-top:1rem">Start voting</button>
     </div>
 
-    <p class="muted hidden" id="guest-watching-note">Scroll the feed to watch each clip. The host will start voting when everyone's seen the round.</p>
+    <p class="muted hidden" id="guest-watching-note">The host will start voting when everyone's seen the round.</p>
   </section>
 
   <!-- VOTING -->

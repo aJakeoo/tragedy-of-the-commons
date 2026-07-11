@@ -224,24 +224,26 @@ label {
 .link-slot .status.bad { color: var(--color-error); }
 .link-slot .status.checking { color: var(--color-text-muted); }
 
-/* Compiled presenter — a TikTok-style vertical feed, see js/presenter.js.
-   Breaks out of the page's centered 720px column to full viewport width, on
-   a dark stage. The feed itself is a fixed-height scroll-snap container:
-   each clip is one full-height slide, snapping one at a time like the real
-   TikTok FYP; an IntersectionObserver marks the snapped clip active
+/* Compiled presenter — a full-screen TikTok-style vertical feed, see
+   js/presenter.js. Mobile web is the primary target: the wrap covers the
+   entire viewport (fixed inset 0 — the page header and everything else sit
+   behind it), and each clip is one full-height snap slide, like the real
+   TikTok FYP. The feed's last slide is the round wrap-up (host's Start
+   voting controls / guest waiting note), so finishing the clips flows
+   straight into voting with no UI chrome stealing screen space. An
+   IntersectionObserver (+ scroll fallback) marks the snapped clip active
    (audible). Overlay chrome (platform badge, caption/contributors) floats
    on top of the clip. TikTok/Instagram embeds enforce their own internal
    max-width, so on desktop the clip centers as a portrait column — same as
    tiktok.com's own desktop feed. */
 .presenter-feed-wrap {
-  position: relative;
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  margin-bottom: 1.5rem;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
   background: oklch(16% 0.015 50);
 }
 .presenter-feed {
-  height: 84dvh;
+  height: 100dvh;
   overflow-y: auto;
   scroll-snap-type: y mandatory;
   overscroll-behavior-y: contain;
@@ -264,6 +266,7 @@ label {
   overflow: hidden;
 }
 .presenter-embed {
+  position: relative; /* Instagram's embed.js positions its iframe absolutely — contain it here, not the card */
   height: 100%;
   width: 100%;
   max-width: 560px;
@@ -275,7 +278,8 @@ label {
 }
 .presenter-embed::-webkit-scrollbar { display: none; }
 .presenter-embed iframe { width: 100%; height: 100%; border: none; }
-.presenter-embed blockquote.instagram-media {
+.presenter-embed blockquote.instagram-media,
+.presenter-embed iframe.instagram-media {
   max-width: 100% !important;
   min-width: 0 !important;
   width: 100% !important;
@@ -325,9 +329,9 @@ label {
 .feed-sound-btn {
   position: absolute;
   left: 50%;
-  bottom: 1.25rem;
+  bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
-  z-index: 5;
+  z-index: 45;
   border-radius: 999px;
   padding: 0.7rem 1.4rem;
   font-size: 0.9rem;
@@ -336,6 +340,24 @@ label {
   box-shadow: 0 4px 18px oklch(0% 0 0 / 0.35);
 }
 .feed-sound-btn:hover { background: oklch(98% 0.015 80); }
+
+/* The feed's final slide — round wrap-up with the Start-voting controls
+   (host) or waiting note (guest), centered on the dark stage. */
+.feed-endcard { flex-direction: column; gap: 0.5rem; padding: 1.5rem; }
+.feed-endcard-inner { width: 100%; max-width: 420px; }
+.feed-endcard-title {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  text-align: center;
+  color: oklch(94% 0.02 75);
+  margin: 0 0 1rem;
+}
+.feed-endcard .card { background: var(--color-card); }
+.feed-endcard #guest-watching-note {
+  color: oklch(80% 0.02 70);
+  text-align: center;
+}
+.feed-endcard .feed-empty { padding: 0 0 1rem; }
 .contributor-tag, .weight-badge {
   display: inline-block;
   border-radius: 999px;

@@ -559,3 +559,100 @@ verified via direct oEmbed calls, plus a syntactically-valid but
 non-existent Instagram Reel URL — sufficient for Instagram since that
 platform's link validation is format-only by design (no liveness check
 possible, see Session 1).
+
+---
+
+## Session 8 — TikTok-style full-screen feed, sound-on by default, end-card voting handoff
+
+**Commits:** `dd6a1eb` (feed rework + sound gate), plus the QA-fix commit after it (see git log).
+
+**What changed (user request: solve auto-unmute, assemble clips like a real
+TikTok feed; mid-session addendum from phone testing: mobile web is the
+primary target, video should be unmuted by default, clips should fill the
+whole screen, and the slide after the last clip should be the
+proceed-to-voting screen with no UI chrome stealing space):**
+
+- The presenter is now a full-screen vertical snap feed. The wrap is
+  `position: fixed; inset: 0` on a dark stage (100dvh — page header and
+  everything else sit behind it), each clip is one full-height
+  `scroll-snap-align: start / scroll-snap-stop: always` slide, and platform
+  badge / caption / contributors float over the clip as pointer-events-none
+  overlays, TikTok-style. The old below-feed hint paragraph is gone.
+- The feed's final slide is the round wrap-up ("That's every clip." +
+  host's attribution toggle and Start voting button, or the guest waiting
+  note) — the host controls are MOVED into that slide each render and
+  parked back on the section before the next rebuild. Snapping to it
+  pauses all clips (`deactivateFeed`). Finishing the clips flows straight
+  into voting; verified live: Start voting from the end card lands in
+  phase-voting with the feed hidden.
+- Whichever card is snapped becomes the active (audible) clip, detected by
+  THREE redundant paths (all idempotent): IntersectionObserver (0.6
+  threshold), a debounced scroll/scrollend listener, and a 500ms
+  setInterval poller comparing `round(scrollTop / clientHeight)`. The
+  poller is not paranoia: live QA caught a renderer state (heavy platform
+  iframes + long stalls) where BOTH IntersectionObserver callbacks AND
+  scroll events stopped being delivered entirely — they ride the
+  rendering-frame pipeline — while timers kept running. With the poller,
+  activation kept working on that wedged tab (verified via the observable
+  Instagram teardown/rebuild side effect: node identity changed after
+  snapping away).
+
+**Sound: what was ACTUALLY established this session (supersedes Session 7's
+"reload unmuted works" hope):**
+
+- Reconfirmed: a player loaded `muted=1` cannot be unmuted from the host
+  page. The postMessage `unMute` takes effect for ~2ms (`onMute:false`)
+  and is silently reverted (`onMute:true`), no error event. User
+  activation does not cross postMessage. Full stop.
+- New finding: a player loaded `muted=0&autoplay=1` is a GAMBLE the
+  browser decides silently. When allowed, it plays with sound — the
+  explicit `play`+`unMute` nudge right after `onPlayerReady` is what makes
+  the unmuted state stick. When blocked, there is NO `AUTOPLAY_ERROR`
+  (3002) despite TikTok documenting one for this case — the player just
+  wedges at `onStateChange: 3` (buffering) forever as a black card that
+  ignores every subsequent postMessage command. Observed repeatedly.
+- New finding, dead end, do not revisit: `autoplay=0` (the obvious
+  "preload unmuted-but-paused, then just send play" idea) produces a
+  player that never initializes AT ALL — black, no `onPlayerReady`, deaf
+  to all commands. `autoplay=1` is effectively required.
+- Therefore the shipped design treats every `muted=0` load as a
+  watchdog-guarded gamble (`armUnmutedWatchdog`, 8s): if the player isn't
+  actually PLAYING (state 1) when the watchdog fires, it reloads that one
+  clip `muted=1` — the configuration that always works — and flags it
+  `soundReloadFailed` so that clip never gambles again. No retry loops.
+  - The feed's FIRST clip always loads `muted=0`: sound-on by default
+    wherever the browser allows it (the user's actual ask). Where it
+    doesn't, the worst case is ~8s of black card before muted autoplay
+    kicks in — watched it happen and recover live.
+  - A muted active clip still gets the cheap `unMute` try on activation;
+    the revert signature (or a 1.2s timer) triggers its ONE unmuted
+    reload gamble.
+  - `soundEnabled` (session-wide opt-in) is now only marked when a clip
+    is genuinely PLAYING unmuted (`lastState === 1` + `muteState ===
+    false`, either arrival order) — an early bug this session let the
+    wedged gamble's cosmetic `onMute:false` mark it and wrongly hide the
+    "Tap for sound" button; fixed and re-verified (button stays visible
+    after a failed gamble).
+- The "Tap for sound" pill overlays the feed bottom; a real tap gives the
+  page sticky activation and kicks the active clip through the
+  unmute-or-reload path. It hides once sound is genuinely on (including
+  when the user unmutes via a player's own speaker icon — that emits
+  `onMute:false` while playing, which we treat as the opt-in).
+
+**QA caveats (why sound-on couldn't be end-to-end verified on this desktop
+today):** after ~20+ player iframe loads during QA, TikTok's embed player
+stopped initializing playback entirely on this IP (even known-good muted
+configs wedged at buffering; earlier in the same session the same clips
+played fine muted). Combined with repeated multi-30s renderer stalls
+("renderer frozen" CDP screenshot timeouts) on the automation tab, the
+final verification runs exercised every state-machine path (activation,
+teardown, watchdog recovery, button visibility, end-card handoff) but
+could not observe actual audible unmuted playback. The design's failure
+modes all degrade to muted autoplay or tap-to-play — nothing hard-blocks.
+Real-device (phone) testing on the deployed Pages site is the meaningful
+next check, and is exactly the environment the user is testing in.
+
+**Also noted during QA (pre-existing, not addressed):** `revealAttribution`
+was already true for a brand-new room (contributor names showed without
+the host touching the toggle) — worth a look next session if "hidden by
+default" is still the intent.
