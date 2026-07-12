@@ -16,7 +16,7 @@ import {
 let bound = false;
 let startingVoting = false;
 let presenterRound = null;
-let renderedEntryIds = null; // sorted, joined — identifies the current feed's contents
+let renderedEntryIds = null; // sorted, joined - identifies the current feed's contents
 let feedObserver = null;
 let feedPoller = 0;
 
@@ -97,18 +97,18 @@ function renderContributors(card, entry, revealAttribution) {
 }
 
 // Whichever card the feed has snapped to becomes the active (audible) clip
-// — or, on the end card (which has no embed), everything pauses. Two
+// - or, on the end card (which has no embed), everything pauses. Two
 // detection paths, both cheap and idempotent: an IntersectionObserver
 // (0.6 visibility), plus a scroll-position fallback. The fallback matters:
 // IO notifications ride the rendering-frame pipeline, and with several
 // heavy platform iframes running, that pipeline can stall long enough that
-// IO callbacks simply never arrive (observed live in QA) — while plain
+// IO callbacks simply never arrive (observed live in QA) - while plain
 // scroll events still fire. Each card is exactly one feed-viewport tall
 // (CSS), so round(scrollTop / clientHeight) IS the snapped card index.
 function activateCard(card) {
   const container = card?.querySelector('.presenter-embed');
   if (container) activateContainer(container);
-  else deactivateFeed(); // snapped to the end card — silence the clips
+  else deactivateFeed(); // snapped to the end card - silence the clips
 }
 
 function activateCardAt(feed, index) {
@@ -143,7 +143,7 @@ function observeFeed(feed) {
 
   // Last-resort poller: scroll events ALSO ride the rendering pipeline and
   // were observed going silent right alongside IO during a long renderer
-  // stall — while plain timers kept running. Polling the snap position is
+  // stall - while plain timers kept running. Polling the snap position is
   // stall-proof, and activateCardAt is a no-op when nothing changed.
   clearInterval(feedPoller);
   feedPoller = setInterval(() => {
@@ -156,7 +156,7 @@ function observeFeed(feed) {
 }
 
 // The final feed slide: after the last clip, snapping down lands on the
-// "what happens next" card — the host's attribution toggle + Start voting
+// "what happens next" card - the host's attribution toggle + Start voting
 // button, or the guest's waiting note. Those elements live in game.html
 // (render() below toggles them by id), so they're MOVED into this slide
 // rather than cloned.
@@ -181,12 +181,12 @@ function buildEndCard(entries) {
   return card;
 }
 
-// Rebuilds the whole feed — only called when the actual set of entries for
+// Rebuilds the whole feed - only called when the actual set of entries for
 // this round changes, not on every snapshot (e.g. toggling attribution
 // shouldn't reload every embed and reset any playback in progress).
 function renderGrid(entries) {
   const feed = document.getElementById('presenter-grid');
-  // The host controls live inside the end card between renders — park
+  // The host controls live inside the end card between renders - park
   // them back on the section before wiping the feed so innerHTML=''
   // doesn't destroy them.
   const phase = document.getElementById('phase-compiling');
@@ -210,7 +210,7 @@ function renderGrid(entries) {
   observeFeed(feed);
 
   // TikTok clips render as self-contained Embed Player iframes (see
-  // embeds.js) — no loader script needed. One process() call still picks up
+  // embeds.js) - no loader script needed. One process() call still picks up
   // every Instagram blockquote in the feed.
   processInstagramEmbeds();
 }
@@ -226,7 +226,7 @@ export function render(room, ctx) {
   // The compiled feed is host-only: the host is the one casting to the
   // shared screen, and everyone else watches THAT, not their own phone.
   // Guests get a lightweight "eyes on the big screen" view and never load
-  // a single platform iframe — which also keeps their devices quiet and
+  // a single platform iframe - which also keeps their devices quiet and
   // cheap during the round.
   document.getElementById('presenter-feed-wrap').classList.toggle('hidden', !ctx.isHost);
   document.getElementById('guest-compiling-view').classList.toggle('hidden', ctx.isHost);
@@ -266,7 +266,7 @@ export function render(room, ctx) {
       soundBtn.classList.add('hidden');
     });
     // Fires when sound gets enabled some other way (e.g. the user tapped a
-    // player's own speaker icon) — the button is then redundant.
+    // player's own speaker icon) - the button is then redundant.
     window.addEventListener('totc-sound-enabled', () => {
       soundBtn.classList.add('hidden');
     });

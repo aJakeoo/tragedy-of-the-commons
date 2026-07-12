@@ -1,6 +1,6 @@
 import { MERGE_VOTE_MULTIPLIER_PER_CONTRIBUTOR } from './config.js';
 
-// Firebase keys can't contain . # $ [ ] / — canonical IDs are normally plain
+// Firebase keys can't contain . # $ [ ] / - canonical IDs are normally plain
 // alphanumerics but this keeps merging safe regardless of source platform.
 export function sanitizeKey(raw) {
   return String(raw).replace(/[.#$\[\]/]/g, '_');
@@ -14,7 +14,7 @@ export function sanitizeKey(raw) {
 // compile time and persisted with the entry. Without it, entries come out
 // grouped by submitter (player 1's clips, then player 2's, ...), which
 // both telegraphs who submitted what and makes the feed predictable.
-// Shuffling once at compile — rather than per-render — keeps every
+// Shuffling once at compile - rather than per-render - keeps every
 // client's feed and ballot in the same random order, stable across
 // snapshots.
 //
@@ -73,17 +73,17 @@ export function multiplierFor(entry) {
 
 // Tallies weighted totals and produces a rank-sorted list (competition
 // ranking: ties share a rank, next rank skips accordingly). Also returns,
-// per entry, which voters contributed how many raw points — the reveal
+// per entry, which voters contributed how many raw points - the reveal
 // animation shows this breakdown ("Tommy +4, Randy +2") rather than just an
 // abstract total. Voter identity here is intentionally always included:
 // it's a separate concern from the presenter phase's submitter-attribution
 // toggle, which only ever hides who *submitted* a clip, not who *voted* for
-// it — voter identity is public at reveal time regardless of that toggle.
+// it - voter identity is public at reveal time regardless of that toggle.
 //
 // submissions: { [entryId]: { ...entry, contributors } }
 // ballots: { [playerId]: { [entryId]: points } }
 // returns each result with `voterBreakdown: [{ playerId, points }]`, sorted
-// by points descending — resolving playerId to a display name is left to
+// by points descending - resolving playerId to a display name is left to
 // the caller (reveal.js), which has access to the room's player list.
 export function tallyResults(submissions, ballots) {
   const totals = {};

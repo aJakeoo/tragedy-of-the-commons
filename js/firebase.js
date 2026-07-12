@@ -20,7 +20,7 @@ import {
 } from './config.js';
 
 // Firestore calls have been observed to intermittently hang with no thrown
-// error on some networks (see output.md for the investigation) — every
+// error on some networks (see output.md for the investigation) - every
 // read/write below is wrapped in this so a stuck call surfaces a catchable
 // TIMED_OUT error instead of leaving callers (and their UI) waiting forever.
 function withTimeout(promise, ms = FIRESTORE_WRITE_TIMEOUT_MS) {
@@ -33,7 +33,7 @@ function withTimeout(promise, ms = FIRESTORE_WRITE_TIMEOUT_MS) {
 // ── Firebase config (Firestore) ──────────────────────────────────────────────
 // Pulled from the "tragedy-of-the-commons" Firebase project. Loaded here via
 // the gstatic CDN modular build (not an npm import) to keep this a
-// zero-build static site, matching this project's stack — same values, just
+// zero-build static site, matching this project's stack - same values, just
 // a different loading mechanism than the Firebase console's copy-paste
 // snippet assumes.
 const FIREBASE_CONFIG = {
@@ -54,13 +54,13 @@ const db = getFirestore(app);
 
 const roomRef = code => doc(db, 'rooms', code);
 
-// Everything for a room — players, every round's submissions and ballots —
+// Everything for a room - players, every round's submissions and ballots -
 // lives as nested map fields on ONE Firestore document (rooms/{code}),
 // instead of a fan of subcollections. This used to be split across up to
 // six separate documents/collections (room, players, round, playerSubmissions,
 // submissions, ballots), which meant subscribeToRoom() had to open up to six
 // concurrent onSnapshot listeners per client. In testing that fan-out proved
-// unreliable — writeBatch() commits touching multiple of those documents
+// unreliable - writeBatch() commits touching multiple of those documents
 // would intermittently hang for 10+ seconds or never resolve at all (no
 // thrown error either), most likely because so many simultaneous
 // long-polling Listen/Write channels from one client strains the connection,
@@ -118,7 +118,7 @@ export async function joinRoom(code, player) {
 }
 
 // Firestore has no server-side "on disconnect" primitive like Realtime
-// Database does — presence would require a heartbeat + stale-player pruning
+// Database does - presence would require a heartbeat + stale-player pruning
 // scheme, which is more machinery than this build calls for. A player who
 // closes their tab just stays listed; harmless for a short, host-supervised
 // party game. Kept as named no-ops so lobby.js doesn't need two code paths.
@@ -130,7 +130,7 @@ export async function removePlayer(code, playerId) {
 }
 
 // Fires cb with the room document's data (or null if it doesn't exist) on
-// every change. A single listener for the whole room — see the note above
+// every change. A single listener for the whole room - see the note above
 // on why this replaced a multi-listener fan-out.
 export function subscribeToRoom(code, cb) {
   return onSnapshot(roomRef(code), snap => cb(snap.exists() ? snap.data() : null));
@@ -144,7 +144,7 @@ export async function startRound(code, round) {
     round,
     [`rounds.${round}`]: {
       startedAt: serverTimestamp(),
-      // Who submitted each clip is visible to everyone by default — the
+      // Who submitted each clip is visible to everyone by default - the
       // host can still hide it via the presenter view's toggle if they want
       // more anonymity, but that's now an opt-in, not the starting state.
       revealAttribution: true,
@@ -190,7 +190,7 @@ export async function revealResults(code) {
 
 // Applies a round's weighted results to each contributing player's running
 // total. Only ever called when config.persistScores is true (see
-// PERSIST_SCORES_ACROSS_ROUNDS in config.js) — stubbed for a future toggle,
+// PERSIST_SCORES_ACROSS_ROUNDS in config.js) - stubbed for a future toggle,
 // not required by the current build.
 export async function applyRoundResultsToScores(code, results, players) {
   const updates = {};

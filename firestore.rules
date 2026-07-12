@@ -1,8 +1,8 @@
 rules_version = '2';
 
-// Tragedy of the Comments — no auth, room-code-gated by obscurity only.
+// Tragedy of the Comments - no auth, room-code-gated by obscurity only.
 // Anyone with a room's 4-character code can read/write everything nested
-// under that room (players, rounds, submissions, ballots) — acceptable for
+// under that room (players, rounds, submissions, ballots) - acceptable for
 // a live, host-supervised party game with no accounts. Everything else is
 // denied by default.
 service cloud.firestore {

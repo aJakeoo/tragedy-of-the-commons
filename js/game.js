@@ -32,7 +32,7 @@ function showPhase(status) {
 
 // A fresh page load's Firestore listener can occasionally receive a stale
 // 'lobby' snapshot for a moment right after the write that flips status away
-// from 'lobby' — the write that sent us here already landed (that's why
+// from 'lobby' - the write that sent us here already landed (that's why
 // lobby.js navigated), but this brand-new listener's first read can lag it
 // by a beat. Redirecting back to lobby.html on that stale read immediately
 // caused a bounce loop with lobby.js's own "status changed, go to game.html"

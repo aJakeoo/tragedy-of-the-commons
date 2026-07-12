@@ -54,11 +54,11 @@ function renderStatus(i) {
     el.textContent = 'Checking...';
     el.classList.add('checking');
   } else if (slot.status === 'ok') {
-    el.textContent = `Looks good${slot.result?.unverifiable ? ' (format valid — Instagram can’t be auto-verified)' : ''}.`;
+    el.textContent = `Looks good${slot.result?.unverifiable ? ' (format valid - Instagram can’t be auto-verified)' : ''}.`;
     el.classList.add('ok');
     slotDiv?.classList.add('valid');
   } else if (slot.status === 'bad') {
-    el.textContent = slot.error || "This link didn't work — try another.";
+    el.textContent = slot.error || "This link didn't work - try another.";
     el.classList.add('bad');
     slotDiv?.classList.add('invalid');
   } else {
@@ -119,7 +119,7 @@ function startTimer(round) {
     fill.style.width = `${pct}%`;
     fill.classList.toggle('low', remaining <= 10);
     label.textContent = remaining > 0
-      ? `${remaining}s — just a nudge, submissions aren't locked when this hits zero`
+      ? `${remaining}s - just a nudge, submissions aren't locked when this hits zero`
       : "Time's up, but you can still submit whenever you're ready.";
     remaining -= 1;
     if (remaining < -1) clearInterval(timerInterval);
@@ -163,7 +163,7 @@ export function render(room, ctx) {
         const current = window.__totcCurrentRoom;
         const merged = mergeSubmissions(current.rounds?.[current.round]?.playerSubmissions || {});
         await closeSubmissionsAndCompile(ctx.code, current.round, merged);
-        // Left disabled — the phase switches away as soon as `status` updates.
+        // Left disabled - the phase switches away as soon as `status` updates.
       } catch (err) {
         btn.disabled = false;
         btn.textContent = 'Close submissions & compile';

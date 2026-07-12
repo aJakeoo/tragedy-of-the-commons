@@ -1,7 +1,7 @@
-// Minimal static file server for local QA — avoids depending on npx/npm
+// Minimal static file server for local QA - avoids depending on npx/npm
 // installs (this machine has a Norton TLS interception issue with the npm
 // registry). Not part of the shipped app; safe to delete before a hosting
-// deploy, or just leave it — it's an inert plain Node script either way.
+// deploy, or just leave it - it's an inert plain Node script either way.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');

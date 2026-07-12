@@ -17,14 +17,14 @@ function contributorsLabel(entry) {
   const names = (entry.contributors || []).map(c => c.name);
   if (names.length === 0) return '';
   if (names.length === 1) return `Submitted by ${names[0]}`;
-  if (names.length === 2) return `${names[0]} & ${names[1]} — submitted this together`;
-  return `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]} — submitted this together`;
+  if (names.length === 2) return `${names[0]} & ${names[1]} - submitted this together`;
+  return `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]} - submitted this together`;
 }
 
 // Timer-driven rather than requestAnimationFrame on purpose: rAF rides
 // the rendering-frame pipeline, which was observed stalling outright under
 // heavy embed-iframe load (same failure mode as IntersectionObserver /
-// scroll events, see presenter.js) — an rAF loop here left the reveal
+// scroll events, see presenter.js) - an rAF loop here left the reveal
 // permanently stuck at 0. Timers keep firing through those stalls.
 function runTallyCountUp(totalRawPoints, onDone) {
   const stage = document.getElementById('tally-stage');
@@ -45,10 +45,10 @@ function runTallyCountUp(totalRawPoints, onDone) {
 }
 
 // Reveals a single row's voter breakdown ("Tommy +4", then "Randy +2")
-// one at a time, bumping the row's displayed total after each — the point
+// one at a time, bumping the row's displayed total after each - the point
 // is to show votes *flowing into* the total rather than an abstract number
 // counting up on its own. Voter identity is always shown here regardless of
-// the presenter phase's submitter-attribution toggle — that toggle only
+// the presenter phase's submitter-attribution toggle - that toggle only
 // ever hides who *submitted* a clip, a separate concern from who voted for
 // it, which is public at reveal time. Returns ms until this row's sequence
 // (including the final weighted-total flourish) is fully settled.
@@ -94,7 +94,7 @@ function revealVoterBreakdown(row, result, players, startDelayMs) {
   return flourishDelay + 300;
 }
 
-// A thumbnail for the podium — the real video thumbnail when we have one
+// A thumbnail for the podium - the real video thumbnail when we have one
 // (TikTok oEmbed provides it; Instagram can't, see linkValidation.js), a
 // platform-colored placeholder otherwise. TikTok thumbnail URLs are
 // signed and expire after a while, so a load failure falls back to the
@@ -122,8 +122,8 @@ function renderLeaderboard(results, players) {
   list.innerHTML = '';
 
   // Podium only: the top three, laid out winner-first. The entrance
-  // animation still plays bottom-up — 3rd pops in first, champion lands
-  // last — so the suspense survives the ordering fix.
+  // animation still plays bottom-up - 3rd pops in first, champion lands
+  // last - so the suspense survives the ordering fix.
   const podium = results.slice(0, 3);
   let maxSettleMs = 0;
 
@@ -141,7 +141,7 @@ function renderLeaderboard(results, players) {
     info.style.flex = '1';
     info.style.margin = '0 0.75rem';
     const titleLine = document.createElement('div');
-    titleLine.textContent = `${r.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels'} — ${r.title || r.url}`;
+    titleLine.textContent = `${r.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels'} - ${r.title || r.url}`;
     const subLine = document.createElement('div');
     subLine.className = 'muted';
     subLine.textContent = contributorsLabel(r);
@@ -186,7 +186,7 @@ export function render(room, ctx) {
   };
 
   if (animatedForRound === round) {
-    // Already played this round's reveal — leave the finished leaderboard as-is
+    // Already played this round's reveal - leave the finished leaderboard as-is
     // instead of replaying it on unrelated snapshot updates (e.g. a stray write).
     return;
   }
@@ -211,7 +211,7 @@ export function render(room, ctx) {
       const winner = cachedResults.find(r => r.rank === 1);
       if (winner) {
         document.getElementById('champion-handle').textContent =
-          `${winner.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels'} — ${winner.title || winner.url}`;
+          `${winner.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels'} - ${winner.title || winner.url}`;
         banner.classList.add('visible');
       }
     }, settleMs));

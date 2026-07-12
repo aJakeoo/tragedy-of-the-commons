@@ -1,8 +1,8 @@
 import { subscribeToRoom, armDisconnectCleanup, cancelDisconnectCleanup, startRound } from './firebase.js';
 import { GAME_NAME } from './config.js';
 
-document.title = `Lobby — ${GAME_NAME}`;
-document.getElementById('game-title').textContent = `Lobby — ${GAME_NAME}`;
+document.title = `Lobby - ${GAME_NAME}`;
+document.getElementById('game-title').textContent = `Lobby - ${GAME_NAME}`;
 
 const code = sessionStorage.getItem('totc_roomCode');
 const playerId = sessionStorage.getItem('totc_playerId');
@@ -24,7 +24,7 @@ function goToGame() {
   if (navigated) return;
   navigated = true;
   if (unsubscribe) unsubscribe();
-  // Cancel the lobby's armed disconnect cleanup before leaving — otherwise
+  // Cancel the lobby's armed disconnect cleanup before leaving - otherwise
   // this navigation's connection drop can race the cancel and delete the
   // player mid-transition. game.js re-arms cleanup once settled there.
   cancelDisconnectCleanup(code, playerId).finally(() => {
@@ -44,7 +44,7 @@ unsubscribe = subscribeToRoom(code, room => {
   const isHost = players[playerId]?.isHost;
 
   // Guests rely on this listener to notice the host started the game and
-  // navigate along. The host does NOT navigate from here — see the comment
+  // navigate along. The host does NOT navigate from here - see the comment
   // in the click handler below for why that caused the actual write to
   // silently never reach the server.
   if (room.status !== 'lobby' && !isHost) {
@@ -99,13 +99,13 @@ unsubscribe = subscribeToRoom(code, room => {
         await startRound(code, 1);
         // Navigate directly off this resolved promise, which only resolves
         // after the write is server-acknowledged. This used to instead wait
-        // for this same subscribeToRoom listener to notice the status flip —
+        // for this same subscribeToRoom listener to notice the status flip -
         // but Firestore applies writes to the local cache optimistically
         // *before* the network round trip completes, so that listener could
         // fire (and this page navigate away via a full page load) while the
         // write was still in flight. Navigating tears down this page's
         // Firestore client along with the pending outbound request, so the
-        // write would silently never actually reach the server — the room
+        // write would silently never actually reach the server - the room
         // stayed on 'lobby' forever with no error, which is exactly the bug
         // reported live. Waiting on the write's own promise guarantees the
         // server has it before we ever leave this page.
@@ -116,8 +116,8 @@ unsubscribe = subscribeToRoom(code, room => {
         startBtn.textContent = 'Start game';
         const errEl = document.getElementById('lobby-error');
         errEl.textContent = err.message === 'TIMED_OUT'
-          ? "That took too long — check your connection and try again."
-          : 'Could not start the game — try again.';
+          ? "That took too long - check your connection and try again."
+          : 'Could not start the game - try again.';
         errEl.classList.remove('hidden');
       }
     };

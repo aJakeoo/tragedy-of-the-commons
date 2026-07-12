@@ -1,4 +1,4 @@
-// Small display-formatting helpers for the Roman-themed visual design —
+// Small display-formatting helpers for the Roman-themed visual design -
 // no game logic here, just how numbers get shown.
 
 const ROMAN_VALUES = [

@@ -1,4 +1,4 @@
-/* Visual design pass — Roman/classical theme (Cinzel + Public Sans, warm
+/* Visual design pass - Roman/classical theme (Cinzel + Public Sans, warm
    cream/terracotta/dark-green OKLCH palette), pulled from the Claude Design
    mockup "Tragedy of the Commons.dc.html". Selectors stay semantic/component-
    based so this can keep evolving without touching js/*.js structure. */
@@ -125,7 +125,7 @@ label {
 
 .hidden { display: none !important; }
 
-/* Header bar used on game.html — wordmark + round in Roman numerals */
+/* Header bar used on game.html - wordmark + round in Roman numerals */
 .game-header {
   display: flex;
   align-items: center;
@@ -224,9 +224,9 @@ label {
 .link-slot .status.bad { color: var(--color-error); }
 .link-slot .status.checking { color: var(--color-text-muted); }
 
-/* Compiled presenter — a full-screen TikTok-style vertical feed, see
+/* Compiled presenter - a full-screen TikTok-style vertical feed, see
    js/presenter.js. Mobile web is the primary target: the wrap covers the
-   entire viewport (fixed inset 0 — the page header and everything else sit
+   entire viewport (fixed inset 0 - the page header and everything else sit
    behind it), and each clip is one full-height snap slide, like the real
    TikTok FYP. The feed's last slide is the round wrap-up (host's Start
    voting controls / guest waiting note), so finishing the clips flows
@@ -234,7 +234,7 @@ label {
    IntersectionObserver (+ scroll fallback) marks the snapped clip active
    (audible). Overlay chrome (platform badge, caption/contributors) floats
    on top of the clip. TikTok/Instagram embeds enforce their own internal
-   max-width, so on desktop the clip centers as a portrait column — same as
+   max-width, so on desktop the clip centers as a portrait column - same as
    tiktok.com's own desktop feed. */
 .presenter-feed-wrap {
   position: fixed;
@@ -266,7 +266,7 @@ label {
   overflow: hidden;
 }
 .presenter-embed {
-  position: relative; /* Instagram's embed.js positions its iframe absolutely — contain it here, not the card */
+  position: relative; /* Instagram's embed.js positions its iframe absolutely - contain it here, not the card */
   height: 100%;
   width: 100%;
   max-width: 560px;
@@ -286,7 +286,7 @@ label {
   max-height: 100%;
   overflow-y: auto;
 }
-/* Overlay chrome — pointer-events off so taps/scrolls reach the clip. */
+/* Overlay chrome - pointer-events off so taps/scrolls reach the clip. */
 .feed-badge {
   position: absolute;
   top: 0.8rem;
@@ -341,7 +341,7 @@ label {
 }
 .feed-sound-btn:hover { background: oklch(98% 0.015 80); }
 
-/* The feed's final slide — round wrap-up with the Start-voting controls
+/* The feed's final slide - round wrap-up with the Start-voting controls
    (host) or waiting note (guest), centered on the dark stage. */
 .feed-endcard { flex-direction: column; gap: 0.5rem; padding: 1.5rem; }
 .feed-endcard-inner { width: 100%; max-width: 420px; }
@@ -370,13 +370,12 @@ label {
   text-transform: uppercase;
 }
 
-/* Guest view during the compiled feed — the host casts the clips to the
+/* Guest view during the compiled feed - the host casts the clips to the
    shared screen; guests just get pointed at it. */
 .guest-compiling {
   text-align: center;
   padding: 4rem 1.5rem;
 }
-.guest-compiling-icon { font-size: 3rem; margin-bottom: 0.75rem; }
 
 /* Post-submit ballot celebration */
 .ballot-done {

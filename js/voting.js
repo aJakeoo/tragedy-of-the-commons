@@ -49,7 +49,7 @@ function renderEntries(entries, budget) {
     div.className = 'ballot-entry';
 
     const title = document.createElement('div');
-    title.textContent = `${entry.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels'} — ${entry.title || entry.url}`;
+    title.textContent = `${entry.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels'} - ${entry.title || entry.url}`;
     div.appendChild(title);
 
     if ((entry.contributors || []).length > 1) {

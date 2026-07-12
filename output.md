@@ -1,8 +1,8 @@
-# Tragedy of the Comments — Build Log
+# Tragedy of the Comments - Build Log
 
 Append-only build/QA log, same convention as Polarity, the Jeopardy game, and Geopostor.
 
-## Session 1 — Initial build
+## Session 1 - Initial build
 
 ### Stack decision
 Built as vanilla JS + Firebase, hosted static, matching the rest of this
@@ -15,7 +15,7 @@ build (not an npm import) to keep this a zero-build static site.
 ### Files added
 | File | Purpose |
 |---|---|
-| `index.html` / `js/landing.js` | Landing page — create room / join room |
+| `index.html` / `js/landing.js` | Landing page - create room / join room |
 | `lobby.html` / `js/lobby.js` | Real-time lobby, host start-game control |
 | `game.html` / `js/game.js` | Single-page phase router driven by `room.status` |
 | `js/submission.js` | Submission phase: link slots, soft timer, live validation, close-and-compile |
@@ -32,35 +32,35 @@ build (not an npm import) to keep this a zero-build static site.
 
 ### Platform constraints flagged (not oversights)
 - **TikTok oEmbed** (`https://www.tiktok.com/oembed`) sends `Access-Control-Allow-Origin: *`
-  on success — confirmed via direct curl test — so it's callable straight from
+  on success - confirmed via direct curl test - so it's callable straight from
   browser JS. It resolves short links, returns a canonical video ID
   (`embed_product_id`), a thumbnail, and errors on a dead video. One call
   covers format validation, liveness resolution, canonicalization, and
   thumbnail for TikTok links.
 - **Instagram's oEmbed** now requires a Meta Graph API access token and sends
-  no CORS headers for anonymous requests (also confirmed via curl — redirects
+  no CORS headers for anonymous requests (also confirmed via curl - redirects
   to a 301 with no ACAO header). There is no client-only way to verify an
   Instagram Reels link is alive or fetch its thumbnail. Instagram links are
   therefore format-validated only (regex + shortcode extraction) and accepted
   without a liveness check or thumbnail. Surfaced in the UI as "format valid
-  — Instagram can't be auto-verified."
+  - Instagram can't be auto-verified."
 - **Score persistence across rounds**: stubbed as an off-by-default toggle
   (`PERSIST_SCORES_ACROSS_ROUNDS` in `config.js`) with the write path already
   implemented in `firebase.js` (`applyRoundResultsToScores`) but never called
-  — flip the constant and wire the call in `reveal.js` if wanted later.
+  - flip the constant and wire the call in `reveal.js` if wanted later.
 - **Disconnect cleanup**: Firestore has no `onDisconnect` primitive like
   Realtime Database. `armDisconnectCleanup`/`cancelDisconnectCleanup` are
-  intentional no-ops with a comment explaining why — a disconnected player
+  intentional no-ops with a comment explaining why - a disconnected player
   just stays listed, which is harmless for a short, host-supervised game.
 
-### QA — in progress (this session)
+### QA - in progress (this session)
 Ran the app against the live Firestore project via a local static server
 (`node serve.js`, port 8080) and a two-tab browser session (host + guest).
 
 **Confirmed working end to end:**
 - Room create/join, real-time lobby sync, round start
 - Link validation: valid TikTok (oEmbed round trip), a deliberately broken
-  TikTok video ID (correctly surfaced as "This link didn't work — try
+  TikTok video ID (correctly surfaced as "This link didn't work - try
   another"), Instagram format-valid-but-unverifiable link, and the
   edit-and-revalidate replacement flow
 - Soft timer counts down, turns red under 10s, does **not** lock submission
@@ -79,14 +79,14 @@ Ran the app against the live Firestore project via a local static server
   counts correctly
 
 **Bugs found and fixed this session:**
-1. Presenter thumbnails had no height cap — a portrait TikTok thumbnail
+1. Presenter thumbnails had no height cap - a portrait TikTok thumbnail
    (576x1024) rendered near full width pushed all the presenter controls off
    screen. Fixed with `max-height: 420px` + `object-fit: contain` in
    `css/style.css`.
 2. Async host action buttons (create/join room, start game, close
    submissions, start voting, reveal results, start next round) gave no
    loading feedback, which looked broken under this machine's network
-   latency (Firestore writes on this box are slow — see note below). Added
+   latency (Firestore writes on this box are slow - see note below). Added
    disabled + "...ing" label states across `landing.js`, `lobby.js`,
    `submission.js`, `presenter.js`, `voting.js`.
 3. **Self-inflicted regression while fixing #2**: the loading-state flags for
@@ -106,7 +106,7 @@ Ran the app against the live Firestore project via a local static server
    about the same box). Not something to fix in app code; the loading-state
    fix in #2 is the mitigation.
 
-### QA — closed out
+### QA - closed out
 
 Re-tested the fix for item 3 by reloading both tabs and playing through
 rounds 2 and 3 back to back with no reload in between (the exact scenario
@@ -125,32 +125,32 @@ in real time.
 No further issues found on this pass. QA phase is clean.
 
 **Intentionally deferred (not bugs, scope calls):**
-- Score persistence across rounds — stubbed behind `PERSIST_SCORES_ACROSS_ROUNDS`
+- Score persistence across rounds - stubbed behind `PERSIST_SCORES_ACROSS_ROUNDS`
   in `config.js`, off by default, per the brief's "flag your choice" ask.
-- Instagram Reels liveness verification and thumbnails — not possible
+- Instagram Reels liveness verification and thumbnails - not possible
   client-side without a Meta Graph API token (see platform constraints
   above); format validation is the ceiling for Instagram links in this build.
 - A "back to submission" escape hatch if a host closes submissions with zero
-  entries — the presenter view handles this gracefully (shows "No clips were
+  entries - the presenter view handles this gracefully (shows "No clips were
   submitted this round" and disables "Start voting") but there's no path
   back to re-open submissions for that round. Edge case that shouldn't come
   up in normal play; flagging rather than building an unused control.
 
 Firebase config in `js/firebase.js` is filled in with the real
-`tragedy-of-the-commons-4e239` project values (not a placeholder) — this was
+`tragedy-of-the-commons-4e239` project values (not a placeholder) - this was
 tested against the live database, not the emulator.
 
 ### Commits
-- `4726977` — initial build, pushed to `main` on
+- `4726977` - initial build, pushed to `main` on
   `https://github.com/aJakeoo/tragedy-of-the-commons.git` before QA closeout
-  (per an ASAP request mid-session) — includes the thumbnail-height fix and
+  (per an ASAP request mid-session) - includes the thumbnail-height fix and
   the loading-state fix, but predates the round-2/3 re-verification above.
 - Follow-up commit with this QA closeout note pushed immediately after.
 
-## Session 2 — Live bug report: "Start game" did nothing
+## Session 2 - Live bug report: "Start game" did nothing
 
 User reported the deployed app (GitHub Pages, `ajakeoo.github.io/tragedy-of-the-commons/`,
-tested on iOS Safari) hung on the lobby screen — clicking "Start game" had
+tested on iOS Safari) hung on the lobby screen - clicking "Start game" had
 no visible effect and never advanced.
 
 **Investigation:** Reproduced directly against the live Firestore project.
@@ -158,38 +158,38 @@ Ruled out the deploy itself (GitHub Pages was serving current code, no console
 errors) and ruled out Firestore being generally broken (isolated writes to
 throwaway documents consistently succeeded in 120–450ms). The actual bug:
 Firestore applies a write to its **local cache optimistically**, before the
-network round trip to the server completes — `subscribeToRoom`'s listener on
+network round trip to the server completes - `subscribeToRoom`'s listener on
 the lobby page was reacting to that same-client optimistic update and firing
 a full `window.location.href = 'game.html'` navigation immediately. That
-navigation tears down the page's JS context — including the still-in-flight
-outbound write request — before it ever reached Firestore's servers. Net
+navigation tears down the page's JS context - including the still-in-flight
+outbound write request - before it ever reached Firestore's servers. Net
 effect: the button appeared to do something (disabled, "Starting..."), the
 page navigated to game.html, game.html found `status` still `'lobby'` and
 bounced back to lobby.html, and the room's actual `status` field in the
 database never changed at all. No error ever surfaced because nothing
-technically threw — the write's promise was simply abandoned mid-flight by
+technically threw - the write's promise was simply abandoned mid-flight by
 the navigation. Confirmed by calling `firebase.js`'s exported functions
-directly (bypassing all UI) — they succeeded reliably in ~300ms every time,
+directly (bypassing all UI) - they succeeded reliably in ~300ms every time,
 proving the data layer itself was never the problem.
 
 **Fixes:**
-1. **`js/lobby.js`** — the host now navigates to `game.html` directly off the
+1. **`js/lobby.js`** - the host now navigates to `game.html` directly off the
    resolved `startRound()` promise (which only resolves after server
    acknowledgment), instead of waiting for its own listener to react to the
    optimistic local update. Guests still navigate via the listener, which is
-   correct for them — they're reacting to someone *else's* write, not racing
+   correct for them - they're reacting to someone *else's* write, not racing
    their own.
-2. **`js/firebase.js`** — collapsed the data model from a fan-out of up to six
+2. **`js/firebase.js`** - collapsed the data model from a fan-out of up to six
    Firestore documents/collections per room (room, players, round,
    playerSubmissions, submissions, ballots) into a single `rooms/{code}`
    document with nested map fields, cutting `subscribeToRoom` from up to six
    concurrent `onSnapshot` listeners down to one. This wasn't the root cause
    of the bug above, but it's a genuine reliability and simplicity win
    (fewer concurrent long-polling connections per client) discovered while
-   investigating, and required no changes to any phase module — they all
+   investigating, and required no changes to any phase module - they all
    already consumed `room.players` / `room.rounds[n].*` in exactly this
    shape.
-3. **`js/firebase.js`, `js/config.js`** — every Firestore call is now wrapped
+3. **`js/firebase.js`, `js/config.js`** - every Firestore call is now wrapped
    in a 12-second timeout (`FIRESTORE_WRITE_TIMEOUT_MS`) that rejects with a
    catchable `TIMED_OUT` error instead of letting a call hang forever with no
    feedback. Every host action button (`landing.js`, `lobby.js`,
@@ -200,7 +200,7 @@ proving the data layer itself was never the problem.
    stuck on a loading label with no way to retry. This doesn't fix a root
    cause by itself, but it means a genuinely flaky network no longer produces
    a silent, unrecoverable dead end.
-4. **`js/game.js`** — added a 2-second grace period before bouncing back to
+4. **`js/game.js`** - added a 2-second grace period before bouncing back to
    `lobby.html` on seeing `status === 'lobby'`, in case a freshly-loaded
    page's first snapshot ever lags behind a just-confirmed write from
    elsewhere. Defensive; not the fix for the bug above, but cheap insurance
@@ -208,45 +208,45 @@ proving the data layer itself was never the problem.
 
 **Verified:** created a fresh room, started it, and confirmed via a direct
 Firestore REST read (bypassing the app entirely) that `status` flipped to
-`submitting` and `round` to `1` — the actual bug condition (write silently
+`submitting` and `round` to `1` - the actual bug condition (write silently
 never landing) is gone. No page bounce, no stuck button, single clean
 navigation to `game.html`.
 
-## Session 3 — Inline video playback in the presenter view
+## Session 3 - Inline video playback in the presenter view
 
 User asked whether the host could stay in the app during the compiled-list
 phase instead of tapping "Open clip" and leaving to TikTok/Instagram, and
 whether playback could happen automatically.
 
 **What's possible vs. not:** TikTok's oEmbed response (already being fetched
-for validation — see `linkValidation.js`) includes ready-made embed HTML: a
+for validation - see `linkValidation.js`) includes ready-made embed HTML: a
 `<blockquote class="tiktok-embed">` plus their own `embed.js` loader, which
 renders TikTok's real interactive player (like/comment counts, captions, tap
 to play) inline via an iframe. Instagram has an equivalent public embed
 format (`<blockquote class="instagram-media">` + `instagram.com/embed.js`).
 Both were added. True *automatic* playback isn't achievable on either
-platform — browsers block silent autoplay broadly, and neither embed SDK
+platform - browsers block silent autoplay broadly, and neither embed SDK
 exposes an autoplay flag even for muted playback. So the host now stays in
 the app and taps play inline instead of opening a new tab, but a tap is
 still required.
 
 **Changes:**
-- `js/linkValidation.js` — TikTok's oEmbed result now also captures `data.html`
+- `js/linkValidation.js` - TikTok's oEmbed result now also captures `data.html`
   (the embed snippet) as `embedHtml`, threaded through `submission.js`'s
   submit handler and `scoring.js`'s `mergeSubmissions` so it survives into
   the round's compiled entries.
-- `js/embeds.js` (new) — renders the TikTok blockquote + reloads their
+- `js/embeds.js` (new) - renders the TikTok blockquote + reloads their
   `embed.js` (their SDK has no documented "reprocess" call, so a fresh
   `<script>` tag is swapped in each time, which is the standard trick for
   single-page apps); renders an Instagram blockquote and calls their
   documented `instgrm.Embeds.process()`, which does support reprocessing.
-- `js/presenter.js` — replaced the thumbnail image + "Open clip" link with
+- `js/presenter.js` - replaced the thumbnail image + "Open clip" link with
   the inline embed. Added a guard (`lastRenderedEntryId`) so the embed only
   re-renders when the actual clip changes, not on every unrelated snapshot
   update (e.g. toggling "show who submitted" used to reset/reload whatever
-  the host was watching — confirmed this stays stable across that toggle in
+  the host was watching - confirmed this stays stable across that toggle in
   testing).
-- `css/style.css` — sizing rules so the embeds (which manage their own
+- `css/style.css` - sizing rules so the embeds (which manage their own
   internal layout) don't overflow the card.
 
 **Verified:** submitted a known-live TikTok link, closed submissions, and
@@ -254,10 +254,10 @@ confirmed the presenter card renders the real interactive TikTok embed
 (caption, like/comment counts, tap-to-play) instead of a static thumbnail,
 and that toggling the attribution checkbox doesn't reset it.
 
-## Session 4 — All clips at once, single-audio enforcement, per-voter reveal breakdown
+## Session 4 - All clips at once, single-audio enforcement, per-voter reveal breakdown
 
 Design (Roman marble / light-theme art direction) was handled separately via
-a Claude Design import provided directly in-session — this session was
+a Claude Design import provided directly in-session - this session was
 functional-only, no styling beyond what the behavior below required.
 
 ### What changed
@@ -265,19 +265,19 @@ functional-only, no styling beyond what the behavior below required.
 1. **Presenter view now shows every round submission at once**, in a
    responsive grid (`js/presenter.js`, `#presenter-grid` in `game.html`),
    instead of one clip at a time behind prev/next navigation. This turned
-   out to be genuinely avoidable, not a fallback — TikTok/Instagram's embed
+   out to be genuinely avoidable, not a fallback - TikTok/Instagram's embed
    scripts handle a page with several blockquotes fine (see latency note
    below), so there was no technical reason to keep pagination. Removed
    `presentIndex` entirely from the room schema (`js/firebase.js`) since
-   nothing tracks "current clip" anymore — every player, host or guest, sees
+   nothing tracks "current clip" anymore - every player, host or guest, sees
    the same static grid and can tap into any card independently.
 
-2. **Single tap plays with sound** — this is each platform's own default
+2. **Single tap plays with sound** - this is each platform's own default
    embed behavior (TikTok and Instagram's tap-to-play widgets don't have a
    separate mute step), not something built here. Confirmed no code path
    adds an extra tap/confirmation on top of it.
 
-3. **Only one clip plays at a time — this took two attempts.** Both embeds
+3. **Only one clip plays at a time - this took two attempts.** Both embeds
    render as cross-origin iframes with no postMessage control API from
    either platform (unlike YouTube's IFrame API), so there's no real
    `pause()` available.
@@ -285,27 +285,27 @@ functional-only, no styling beyond what the behavior below required.
      via the standard `window.blur` + `document.activeElement` trick, since
      click events *inside* a cross-origin iframe are otherwise invisible to
      the parent page), reset every other known iframe's `src` to itself to
-     force a reload. **This broke TikTok's embed permanently** — tested by
+     force a reload. **This broke TikTok's embed permanently** - tested by
      waiting 24+ seconds after triggering it, and the reloaded iframe never
      recovered from a blank loading state. Confirmed reproducible, not a
      one-off.
    - **Fix:** instead of reloading the iframe in place, tearing the card's
      embed container back down to the original `<blockquote>` and letting
-     the platform's embed script rebuild it from scratch — exactly the same
+     the platform's embed script rebuild it from scratch - exactly the same
      path used on first render, which is known to work. Verified this
      recovers reliably (tapped clip A, tapped clip B, watched clip A's card
      reset to its unplayed thumbnail state, waited ~15s, confirmed it became
-     tappable again — repeatable across multiple rounds).
+     tappable again - repeatable across multiple rounds).
    - **Real, honest cost:** rebuilding takes the same ~10-18 seconds TikTok's
      embed widget takes on any first render (confirmed by timing several
-     loads — this is inherent platform latency, not something introduced
+     loads - this is inherent platform latency, not something introduced
      here). Stopping a clip this way means it's genuinely unplayable again
      for that window, not instantly ready. There's no way around this
      without a platform-provided control API, which doesn't exist for either
      TikTok or Instagram's public embeds.
    - **Also observed, not a bug:** on a page with 4 simultaneous TikTok
      blockquotes, some render within ~2-3 seconds and others take up to
-     ~15 seconds — order didn't consistently match DOM order across runs.
+     ~15 seconds - order didn't consistently match DOM order across runs.
      Read this as TikTok's own embed pipeline being slow/uneven under load
      rather than anything wrong in this app; a round with a very large
      number of distinct clips could feel sluggish to fully render, but
@@ -318,7 +318,7 @@ functional-only, no styling beyond what the behavior below required.
    each row's total build up from these ("Tommy +4" fades in, points ticks
    up, then "Randy +2", then the final weighted total with a `×N weight`
    note if the entry was a merge) instead of the row's total just appearing
-   as an abstract number. Voter identity is always shown here — deliberately
+   as an abstract number. Voter identity is always shown here - deliberately
    not gated by the presenter phase's submitter-attribution toggle, which is
    a separate concern (who *submitted* a clip, hideable) from who *voted*
    for it (always public at reveal, per the brief).
@@ -336,7 +336,7 @@ from TikTok to get variety beyond the one link reused in earlier sessions).
 - Stopping one clip to play another correctly resets the first (verified via
   `document.activeElement` before/after, and via the visible card reset)
   and it recovers into a re-playable state after the platform's normal load
-  time — no permanent breakage after the fix in item 3 above
+  time - no permanent breakage after the fix in item 3 above
 - Reveal: exact math verified by hand (Jake gave 2 and 4 points to Riley's
   two clips, Riley gave 3 and 3 to Jake's two clips; final ranking and
   per-voter lines matched exactly, winner correctly highlighted)
@@ -346,7 +346,7 @@ from TikTok to get variety beyond the one link reused in earlier sessions).
 **Not a new bug, re-confirms an existing documented limitation:** while
 speed-running round 2 in testing, triggered "submit links" and "close
 submissions" back to back with no gap, and the close fired before the
-submission's write had round-tripped through the room listener — round 2
+submission's write had round-tripped through the room listener - round 2
 compiled with zero entries. This is the same "no escape hatch for a
 zero-entry round" limitation flagged in Session 1's output, not something
 new. A real host clicking two separate buttons will always have more than
@@ -355,27 +355,27 @@ worth being aware of if a host ever double-taps through the submission flow
 unusually fast.
 
 **Intentionally out of scope this session:** did not add any mitigation for
-the TikTok embed rendering latency (2-15s per clip) beyond documenting it —
+the TikTok embed rendering latency (2-15s per clip) beyond documenting it -
 there's no loading indicator on individual grid cards distinguishing "still
 processing" from "processed, never played." Could add a lightweight skeleton
 state if this becomes an issue with larger rounds in practice.
 
-## Session 5 — Visual design pass (Roman/classical theme)
+## Session 5 - Visual design pass (Roman/classical theme)
 
 Applied the visual design from a Claude Design mockup, "Tragedy of the
-Commons.dc.html". This was a styling-only pass — no changes to game logic,
+Commons.dc.html". This was a styling-only pass - no changes to game logic,
 Firestore schema, or DOM element IDs, so every `js/*.js` module needed only
 small additive tweaks (a couple of new elements to populate, no restructuring).
 
 **How the design was sourced:** the user first pointed at a `claude.ai/design`
 share link; that content never actually reached this session (no attachment,
-no tool output containing it — genuinely never arrived, not something skipped).
+no tool output containing it - genuinely never arrived, not something skipped).
 Fetched the real source afterward via the `DesignSync` tool: `get_project`
 identified the project as type `PROJECT_TYPE_PROJECT` (not the design-system
 type the tool is nominally scoped to), but `list_files` / `get_file` worked
 against it anyway. Also cross-checked against a second file the user provided
-locally, `Tragedy of the Commons (standalone).html` — a bundled/compiled
-export (~165K tokens of inlined runtime, not readable as source) — by serving
+locally, `Tragedy of the Commons (standalone).html` - a bundled/compiled
+export (~165K tokens of inlined runtime, not readable as source) - by serving
 it locally through `serve.js` and viewing it in a browser tab as a visual
 reference, which confirmed the design tokens pulled from the `.dc.html`
 source were accurate before applying them.
@@ -389,7 +389,7 @@ source were accurate before applying them.
 - Room code and player list restyled with avatar-circle initials and a
   pill-shaped host badge, matching the mockup's lobby screen
 - `game.html`'s header restructured into a small wordmark + round indicator
-  bar (round number now shown as a Roman numeral, e.g. "ROUND I") — the one
+  bar (round number now shown as a Roman numeral, e.g. "ROUND I") - the one
   actual DOM structure change this session, isolated to a `<header>` wrapper
   around the two already-existing `#game-title`/`#round-label` elements
 - Reveal ranks now show as ordinals ("1st", "2nd") instead of "#1"/"#2"
@@ -397,7 +397,7 @@ source were accurate before applying them.
   `game.js` and `reveal.js`)
 - Merged/duplicate entries now show a "×N weight" pill badge (new
   `.weight-badge` CSS class) in the presenter grid, the voting ballot, and
-  the reveal breakdown — previously this was inconsistent (presenter grid
+  the reveal breakdown - previously this was inconsistent (presenter grid
   had none, reveal had a plain muted text line)
 - Added a "Champion of the round" banner below the reveal list, fading in
   once the full reveal animation settles, matching the mockup
@@ -407,19 +407,19 @@ grid → voting → reveal) taking a screenshot at each phase to check for
 layout breakage, unreadable contrast, or overflow. Found and fixed one real
 issue: the "Champion of the round" banner rendered correctly but was easy to
 miss in a full-page screenshot (gold text on cream background, positioned in
-a quiet gap) — confirmed via `getBoundingClientRect()` and a zoomed
+a quiet gap) - confirmed via `getBoundingClientRect()` and a zoomed
 screenshot that it *is* rendering with the right content and full opacity,
 so left as-is rather than over-designing a fix for what turned out to be a
 screenshot-legibility issue, not a real bug. Also replaced the three pages'
-stale "Placeholder UI — visual design pass comes later" footer text, since
+stale "Placeholder UI - visual design pass comes later" footer text, since
 the design pass had, at that point, actually happened.
 
-## Session 6 — Presenter sizing, mute limitation, voting UI, attribution default
+## Session 6 - Presenter sizing, mute limitation, voting UI, attribution default
 
 User feedback after using the design-passed build: attribution should
 default to visible (already changed this session, confirmed to stay), the
-presenter screen's clips should be much bigger — "like scrolling a TikTok
-playlist" — and repeatedly tapping a per-clip unmute control across many
+presenter screen's clips should be much bigger - "like scrolling a TikTok
+playlist" - and repeatedly tapping a per-clip unmute control across many
 clips is a lot of friction; also requested the point-budget voting UI use
 +/- buttons instead of typing a number, matching the original mockup.
 
@@ -434,18 +434,18 @@ standard fix for this specific quirk). Confirmed fixed via screenshot
 before/after. Full edge-to-edge width is mainly achieved on phone-width
 viewports; TikTok/Instagram's embeds enforce their own internal max-width
 (~600-640px) that can't be overridden from outside the iframe, so on wide
-desktop screens the clip still centers at that platform-imposed size —
+desktop screens the clip still centers at that platform-imposed size -
 flagged to the user rather than silently under-delivering.
 
-**Auto-unmute — investigated and confirmed not possible:** checked the raw
+**Auto-unmute - investigated and confirmed not possible:** checked the raw
 TikTok oEmbed response directly (`curl`) for any mute/sound-related iframe
-parameter or data attribute — there is none; the actual `<iframe>` is built
+parameter or data attribute - there is none; the actual `<iframe>` is built
 entirely by TikTok's own `embed.js` with no configurability exposed to the
 embedding page. Combined with the iframe being cross-origin (no
 `postMessage` control API, confirmed back in the single-audio-enforcement
 work), there is no client-side way to click or otherwise control TikTok's
 internal mute button. This is a hard platform/browser security boundary, not
-a gap in this implementation — didn't build a fake "auto-unmute" that
+a gap in this implementation - didn't build a fake "auto-unmute" that
 would silently not work. Added a plain-language hint next to the presenter
 grid instead ("tap the speaker icon on the clip itself to turn on sound")
 so the host at least knows what to expect.
@@ -460,12 +460,12 @@ still type past.
 **Verified:** submitted a clip, ran it through to the presenter screen, and
 confirmed via screenshot that the horizontal-scrollbar bug was real before
 the `overflow-x` fix and gone after. Did not get to a full live pass on the
-voting +/- buttons or a multi-clip presenter round in this session — hit a
+voting +/- buttons or a multi-clip presenter round in this session - hit a
 session-level tool rate limit partway through and prioritized shipping the
 already-implemented, low-risk changes over further live verification.
 Worth a quick manual check next session if anything looks off.
 
-## Session 7 — TikTok Embed Player, and why auto-unmute still doesn't fully work
+## Session 7 - TikTok Embed Player, and why auto-unmute still doesn't fully work
 
 User asked for a specific, researched follow-up on Session 6's "no
 postMessage API" finding: TikTok separately documents a real **Embed
@@ -473,7 +473,7 @@ Player** (`https://www.tiktok.com/player/v1/{id}`), distinct from the
 oEmbed blockquote used everywhere else, with query-param configuration and
 a postMessage control channel. Verified the exact wire format directly
 against `developers.tiktok.com/doc/embed-player` before writing any code
-(worth doing — the user's brief guessed a plausible-but-wrong shape):
+(worth doing - the user's brief guessed a plausible-but-wrong shape):
 messages need `{'x-tiktok-player': true, type, value}`, not just
 `{type, value}`, and `onPlayerError`'s payload is `{errorCode, errorType}`,
 not the flat `{code}` the brief assumed. `onStateChange` sends a bare
@@ -487,11 +487,11 @@ in `linkValidation.js`). The blockquote path (`buildTikTokBlockquote`,
 `loadTikTokEmbedScript`) is kept only as a fallback. A `message` listener
 tracks `onPlayerReady`/`onStateChange`/`onPlayerError` per iframe
 (`cardInfo` map, keyed by embed container). Switching which clip is
-"active" (via the existing focus/blur trick from Session 4 — tapping into
+"active" (via the existing focus/blur trick from Session 4 - tapping into
 a card's iframe steals window focus) now sends `pause`+`mute` to the
 previously-active TikTok clip over postMessage instead of tearing it down
 and rebuilding it, and sends `unMute` to the newly-active one. Instagram
-clips are untouched — still oEmbed blockquote, still tap-to-play, still
+clips are untouched - still oEmbed blockquote, still tap-to-play, still
 torn down and rebuilt to stop (no control API exists for it, confirmed
 again this session, not attempted). A TikTok clip whose player reports
 `onPlayerError` with `errorCode 3002` (AUTOPLAY_ERROR) falls back
@@ -499,28 +499,28 @@ permanently to its own blockquote embed rather than getting stuck.
 
 **Confirmed working, live, against the real player (not just code
 review):**
-- The postMessage channel itself — sent a manual `unMute` and got real
+- The postMessage channel itself - sent a manual `unMute` and got real
   `onMute`/`onVolumeChange` events back, exact shape matching the docs.
 - `onPlayerReady` fires for every TikTok clip.
 - Non-active TikTok clips correctly end up paused + muted shortly after
-  render (confirmed two ways: the message trace, and visually — TikTok's
+  render (confirmed two ways: the message trace, and visually - TikTok's
   own native control bar showed a play triangle + muted-speaker icon on
   the backgrounded clip).
 - Switching active clip via a real click into a different card's iframe
   correctly sends `pause`+`mute` to the old one and attempts `unMute` on
-  the new one — no more ~10-18s rebuild penalty for TikTok-to-TikTok
+  the new one - no more ~10-18s rebuild penalty for TikTok-to-TikTok
   switches, which was Session 4's documented cost of the old approach.
-- TikTok clips now autoplay (muted) immediately on render — no tap needed
+- TikTok clips now autoplay (muted) immediately on render - no tap needed
   just to start playback, unlike the old blockquote embed.
 
-**Confirmed NOT reliably working — the actual auto-unmute:** traced the
+**Confirmed NOT reliably working - the actual auto-unmute:** traced the
 raw postMessage events directly. The `unMute` command reaches the player
 and briefly succeeds (`onMute:false` fires), then gets silently reverted
-about 2ms later (`onMute:true`), with no error event to react to — so the
+about 2ms later (`onMute:true`), with no error event to react to - so the
 3002/AUTOPLAY_ERROR fallback never fires for this case, it just ends up
 muted. This reproduced consistently across multiple fresh rounds, and
 still happened after a genuine, focus-confirmed real click directly into
-that specific clip's iframe — so it isn't simply "the default clip needs
+that specific clip's iframe - so it isn't simply "the default clip needs
 its own tap." Best explanation: user activation (the "a real interaction
 authorized this") does not propagate through `postMessage`. A `message`
 event handler is never treated as a gesture by the browser, so even though
@@ -529,40 +529,40 @@ audio-unmute policy can still block/revert it because the call didn't
 originate from a synchronous, in-frame click. This is a browser platform
 constraint one layer up from Session 6's "no control API at all" finding,
 not a bug in this implementation, and not something client code can route
-around — confirmed via `navigator.userActivation` on the host page
-(`hasBeenActive: true` after the click, but that doesn't help — the async
+around - confirmed via `navigator.userActivation` on the host page
+(`hasBeenActive: true` after the click, but that doesn't help - the async
 postMessage hop is what breaks it, not lack of a real click). Left the
 `unMute` attempt in (harmless, may work on browsers with different
 policies) but rewrote `game.html`'s hint text to stop promising automatic
-sound — it now says clips start muted and to tap the speaker icon, which
+sound - it now says clips start muted and to tap the speaker icon, which
 is the fallback that reliably works (a first-party click, not a relayed
 one).
 
-Also chased what looked like a sizing regression — the TikTok Embed Player
+Also chased what looked like a sizing regression - the TikTok Embed Player
 iframe rendered at 546.8px tall, which looked short next to the `75vh`
 Session 6 sizing rule. Turned out to be correct: 546.8px *is* 75% of this
 browser's real 729px CSS viewport height. The confusion was comparing
 against the screenshot tool's 896px capture height, which runs at a
-different scale (~1.23x) than actual CSS pixels — cost some wasted clicks
+different scale (~1.23x) than actual CSS pixels - cost some wasted clicks
 earlier in the session before catching this (several manual test clicks
 landed on the wrong element until the scale mismatch was found via
 `window.innerWidth` vs. screenshot width). No actual bug, no fix needed.
 
 **Also verified this session (closing out Session 6's deferred item):**
-the voting screen's +/- buttons, live, in a real 2-player round —
+the voting screen's +/- buttons, live, in a real 2-player round -
 increment, decrement, the budget cap disabling `+` at the limit, `-`
 disabling at 0, and ballot submission all work correctly.
 
 **QA method note:** used two real, live public TikTok videos
 (`@scout2015/video/6718335390845095173`, `@sulheejessica/video/7319529423311621406`)
 verified via direct oEmbed calls, plus a syntactically-valid but
-non-existent Instagram Reel URL — sufficient for Instagram since that
+non-existent Instagram Reel URL - sufficient for Instagram since that
 platform's link validation is format-only by design (no liveness check
 possible, see Session 1).
 
 ---
 
-## Session 8 — TikTok-style full-screen feed, sound-on by default, end-card voting handoff
+## Session 8 - TikTok-style full-screen feed, sound-on by default, end-card voting handoff
 
 **Commits:** `dd6a1eb` (feed rework + sound gate), plus the QA-fix commit after it (see git log).
 
@@ -573,14 +573,14 @@ whole screen, and the slide after the last clip should be the
 proceed-to-voting screen with no UI chrome stealing space):**
 
 - The presenter is now a full-screen vertical snap feed. The wrap is
-  `position: fixed; inset: 0` on a dark stage (100dvh — page header and
+  `position: fixed; inset: 0` on a dark stage (100dvh - page header and
   everything else sit behind it), each clip is one full-height
   `scroll-snap-align: start / scroll-snap-stop: always` slide, and platform
   badge / caption / contributors float over the clip as pointer-events-none
   overlays, TikTok-style. The old below-feed hint paragraph is gone.
 - The feed's final slide is the round wrap-up ("That's every clip." +
   host's attribution toggle and Start voting button, or the guest waiting
-  note) — the host controls are MOVED into that slide each render and
+  note) - the host controls are MOVED into that slide each render and
   parked back on the section before the next rebuild. Snapping to it
   pauses all clips (`deactivateFeed`). Finishing the clips flows straight
   into voting; verified live: Start voting from the end card lands in
@@ -591,8 +591,8 @@ proceed-to-voting screen with no UI chrome stealing space):**
   setInterval poller comparing `round(scrollTop / clientHeight)`. The
   poller is not paranoia: live QA caught a renderer state (heavy platform
   iframes + long stalls) where BOTH IntersectionObserver callbacks AND
-  scroll events stopped being delivered entirely — they ride the
-  rendering-frame pipeline — while timers kept running. With the poller,
+  scroll events stopped being delivered entirely - they ride the
+  rendering-frame pipeline - while timers kept running. With the poller,
   activation kept working on that wedged tab (verified via the observable
   Instagram teardown/rebuild side effect: node identity changed after
   snapping away).
@@ -605,38 +605,38 @@ proceed-to-voting screen with no UI chrome stealing space):**
   and is silently reverted (`onMute:true`), no error event. User
   activation does not cross postMessage. Full stop.
 - New finding: a player loaded `muted=0&autoplay=1` is a GAMBLE the
-  browser decides silently. When allowed, it plays with sound — the
+  browser decides silently. When allowed, it plays with sound - the
   explicit `play`+`unMute` nudge right after `onPlayerReady` is what makes
   the unmuted state stick. When blocked, there is NO `AUTOPLAY_ERROR`
-  (3002) despite TikTok documenting one for this case — the player just
+  (3002) despite TikTok documenting one for this case - the player just
   wedges at `onStateChange: 3` (buffering) forever as a black card that
   ignores every subsequent postMessage command. Observed repeatedly.
 - New finding, dead end, do not revisit: `autoplay=0` (the obvious
   "preload unmuted-but-paused, then just send play" idea) produces a
-  player that never initializes AT ALL — black, no `onPlayerReady`, deaf
+  player that never initializes AT ALL - black, no `onPlayerReady`, deaf
   to all commands. `autoplay=1` is effectively required.
 - Therefore the shipped design treats every `muted=0` load as a
   watchdog-guarded gamble (`armUnmutedWatchdog`, 8s): if the player isn't
   actually PLAYING (state 1) when the watchdog fires, it reloads that one
-  clip `muted=1` — the configuration that always works — and flags it
+  clip `muted=1` - the configuration that always works - and flags it
   `soundReloadFailed` so that clip never gambles again. No retry loops.
   - The feed's FIRST clip always loads `muted=0`: sound-on by default
     wherever the browser allows it (the user's actual ask). Where it
     doesn't, the worst case is ~8s of black card before muted autoplay
-    kicks in — watched it happen and recover live.
+    kicks in - watched it happen and recover live.
   - A muted active clip still gets the cheap `unMute` try on activation;
     the revert signature (or a 1.2s timer) triggers its ONE unmuted
     reload gamble.
   - `soundEnabled` (session-wide opt-in) is now only marked when a clip
     is genuinely PLAYING unmuted (`lastState === 1` + `muteState ===
-    false`, either arrival order) — an early bug this session let the
+    false`, either arrival order) - an early bug this session let the
     wedged gamble's cosmetic `onMute:false` mark it and wrongly hide the
     "Tap for sound" button; fixed and re-verified (button stays visible
     after a failed gamble).
 - The "Tap for sound" pill overlays the feed bottom; a real tap gives the
   page sticky activation and kicks the active clip through the
   unmute-or-reload path. It hides once sound is genuinely on (including
-  when the user unmutes via a player's own speaker icon — that emits
+  when the user unmutes via a player's own speaker icon - that emits
   `onMute:false` while playing, which we treat as the opt-in).
 
 **QA caveats (why sound-on couldn't be end-to-end verified on this desktop
@@ -648,18 +648,18 @@ played fine muted). Combined with repeated multi-30s renderer stalls
 final verification runs exercised every state-machine path (activation,
 teardown, watchdog recovery, button visibility, end-card handoff) but
 could not observe actual audible unmuted playback. The design's failure
-modes all degrade to muted autoplay or tap-to-play — nothing hard-blocks.
+modes all degrade to muted autoplay or tap-to-play - nothing hard-blocks.
 Real-device (phone) testing on the deployed Pages site is the meaningful
 next check, and is exactly the environment the user is testing in.
 
 **Also noted during QA (pre-existing, not addressed):** `revealAttribution`
 was already true for a brand-new room (contributor names showed without
-the host touching the toggle) — worth a look next session if "hidden by
+the host touching the toggle) - worth a look next session if "hidden by
 default" is still the intent.
 
 ---
 
-## Session 9 — Host-only feed, ballot confetti, top-3 reveal, double-buffered sound
+## Session 9 - Host-only feed, ballot confetti, top-3 reveal, double-buffered sound
 
 **User feedback driving this session:** auto-unmute still not working on
 the phone; only the host (the one casting to the shared screen) should see
@@ -670,7 +670,7 @@ order and should show only the top three, with thumbnails.
 **Host-only feed.** presenter.render now short-circuits for guests: the
 full-screen feed (and every platform iframe) is host-only, and guests get
 a lightweight "Eyes on the big screen" view during compiling. Verified
-live: guest tab renders zero iframes and zero cards. Side benefit —
+live: guest tab renders zero iframes and zero cards. Side benefit -
 guests' phones do no embed work at all during the round.
 
 **Ballot confetti screen.** Voting now has two views. Submitting swaps the
@@ -682,11 +682,11 @@ confetti + done view; change → form; resubmit → confetti again; the
 progress card and host's Reveal button stay visible below.
 
 **Top-3 reveal.** The leaderboard now renders ONLY the podium (top three
-by weighted points), laid out winner-first top-down — fixing the "reverse
-order" complaint — while the entrance animation still plays bottom-up
+by weighted points), laid out winner-first top-down - fixing the "reverse
+order" complaint - while the entrance animation still plays bottom-up
 (3rd in first, champion lands last) to keep the suspense. Each row gets a
 thumbnail: the real video thumbnail for TikTok (oEmbed `thumbnail_url`,
-already captured at submission time and carried through the merge — no
+already captured at submission time and carried through the merge - no
 data-model change needed), a platform-branded gradient tile for Instagram
 (no client-accessible thumbnail exists, per Session 1) or when a TikTok
 thumbnail URL has expired (they're signed + short-lived; `onerror` falls
@@ -698,11 +698,11 @@ rendering, IG fallback tile, voter chips animating in.
 used requestAnimationFrame, which rides the same rendering-frame pipeline
 that Session 8 caught stalling under embed load (IO callbacks and scroll
 events both stop). On a stalled tab the reveal sat frozen at "Tallying
-votes… 0" forever — reproduced live. Now timer-driven (setInterval 33ms),
+votes… 0" forever - reproduced live. Now timer-driven (setInterval 33ms),
 which keeps firing through stalls; reproduced the fix live too.
 
 **Sound: double-buffered gamble (replaces the in-place unmuted reload).**
-The postMessage-unmute path is gone entirely — it never once held (the
+The postMessage-unmute path is gone entirely - it never once held (the
 ~2ms revert, Sessions 7-8). New model in embeds.js:
 - The feed's first clip still loads muted=0 directly (nothing's playing
   yet, so nothing to lose), watchdog-guarded as before.
@@ -710,14 +710,14 @@ The postMessage-unmute path is gone entirely — it never once held (the
   snapping to a new clip once sound is on) runs `soundGamble`: a SECOND,
   invisible muted=0 player loads absolutely-positioned behind the visible
   muted one. Only when the hidden player is confirmed actually playing
-  unmuted (state 1 + onMute:false, either order) is it promoted — old
+  unmuted (state 1 + onMute:false, either order) is it promoted - old
   iframe removed, new one revealed, `seekTo` the muted playback's last
   reported time so it picks up where the viewer was. On timeout (10s) or
   AUTOPLAY_ERROR it's discarded invisibly: the visible muted playback is
   never interrupted, so a lost gamble costs the viewer NOTHING (the old
   in-place reload showed a black card for up to 8s on a loss).
 - The tap handler starts the gamble iframe's load synchronously inside the
-  click, so it loads under both transient and sticky activation — the
+  click, so it loads under both transient and sticky activation - the
   strongest position mobile Chrome's autoplay delegation offers.
 - Scrolling away mid-gamble cancels it; the user unmuting via the player's
   own speaker icon cancels it too (sound achieved) and records the
@@ -725,7 +725,7 @@ The postMessage-unmute path is gone entirely — it never once held (the
 
 **QA caveat, same as Session 8:** TikTok's embed player was still refusing
 to start playback for this IP during QA (every player wedged at buffering
-regardless of mute config — throttling from the day's load volume), so
+regardless of mute config - throttling from the day's load volume), so
 the gamble's win path (promote + seek) couldn't be observed end-to-end on
 this desktop; its state machine, cancellation paths, and the guaranteed
 non-disruption of the visible player were verified by code-path review
@@ -734,7 +734,7 @@ testing on the deployed site is the real check for the win path.
 
 ---
 
-## Session 9 addendum — randomized clip order
+## Session 9 addendum - randomized clip order
 
 Compiled clips were coming out grouped by submitter (player 1's clips,
 then player 2's, ...), which both telegraphed who submitted what and made

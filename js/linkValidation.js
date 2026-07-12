@@ -13,7 +13,7 @@
 //   or fetch its thumbnail. Instagram links are therefore format-validated
 //   only (regex + shortcode extraction) and accepted without a liveness
 //   check or thumbnail. This is a real platform constraint, not an
-//   oversight — flagged in output.md.
+//   oversight - flagged in output.md.
 
 const TIKTOK_VIDEO_RE = /^https?:\/\/(?:www\.)?tiktok\.com\/@[\w.\-]+\/video\/(\d+)\/?(?:\?.*)?$/i;
 const TIKTOK_SHORT_RE = /^https?:\/\/(?:vm|vt|m)\.tiktok\.com\/[\w\-]+\/?(?:\?.*)?$/i;
@@ -35,7 +35,7 @@ function extractInstagramShortcode(url) {
 }
 
 // Resolves a link: validates format, then (TikTok only) verifies it's live
-// and pulls a canonical ID + thumbnail via oEmbed. Never throws — always
+// and pulls a canonical ID + thumbnail via oEmbed. Never throws - always
 // resolves to a result object so callers can render a clean invalid state.
 export async function validateAndResolveLink(rawUrl) {
   const url = (rawUrl || '').trim();
@@ -50,7 +50,7 @@ export async function validateAndResolveLink(rawUrl) {
     try {
       const res = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`);
       if (!res.ok) {
-        return { ok: false, platform, error: "This link didn't work — try another." };
+        return { ok: false, platform, error: "This link didn't work - try another." };
       }
       const data = await res.json();
       return {
@@ -62,7 +62,7 @@ export async function validateAndResolveLink(rawUrl) {
         title: data.title || '',
         author: data.author_name || '',
         // The oEmbed response's `html` is a ready-made <blockquote> + loader
-        // script snippet — TikTok's own embed widget, not something we build
+        // script snippet - TikTok's own embed widget, not something we build
         // ourselves. Rendering this in presenter.js lets the host play the
         // clip inline (tap to play, same as embeds anywhere else) instead of
         // leaving the app to open TikTok. Stored on the entry now so it
@@ -70,7 +70,7 @@ export async function validateAndResolveLink(rawUrl) {
         embedHtml: data.html || null,
       };
     } catch {
-      return { ok: false, platform, error: "This link didn't work — try another." };
+      return { ok: false, platform, error: "This link didn't work - try another." };
     }
   }
 
