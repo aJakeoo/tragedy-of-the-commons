@@ -1,4 +1,5 @@
 import { submitBallot, revealResults } from './firebase.js';
+import { sortEntries } from './scoring.js';
 import { VOTE_POINT_BUDGET } from './config.js';
 import { showPhaseError } from './uiError.js';
 
@@ -120,7 +121,9 @@ export function render(room, ctx) {
   const ballots = roundData.ballots || {};
   const budget = room.config?.votePointBudget ?? VOTE_POINT_BUDGET;
 
-  const eligible = Object.entries(submissions).filter(
+  // Same random compile-time order as the feed, minus the player's own
+  // clips (no voting for yourself).
+  const eligible = sortEntries(Object.entries(submissions)).filter(
     ([, entry]) => !(entry.contributors || []).some(c => c.id === ctx.playerId)
   );
 

@@ -731,3 +731,24 @@ this desktop; its state machine, cancellation paths, and the guaranteed
 non-disruption of the visible player were verified by code-path review
 and the absence of console errors with pending iframes present. Phone
 testing on the deployed site is the real check for the win path.
+
+---
+
+## Session 9 addendum — randomized clip order
+
+Compiled clips were coming out grouped by submitter (player 1's clips,
+then player 2's, ...), which both telegraphed who submitted what and made
+the feed predictable. `mergeSubmissions` now Fisher-Yates-shuffles the
+entry ids once at compile time and stamps each entry with a persisted
+`order` index, so every client (host feed, everyone's ballots) sees the
+same random order, stable across snapshots and re-renders. New
+`sortEntries` helper in scoring.js applies it, with an entryId tiebreak
+so rooms compiled before the field existed still sort deterministically.
+presenter.js and voting.js both use it.
+
+QA: unit-tested via node (order indices complete and distinct,
+sortEntries honors them, shuffle demonstrably non-degenerate over 200
+runs, legacy no-`order` entries fall back deterministically, dedup +
+contributors untouched) plus ESM syntax check on the three edited
+modules. The in-browser compile path is the same mergeSubmissions call
+the previous rounds already exercised live.

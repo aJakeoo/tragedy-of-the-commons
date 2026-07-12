@@ -1,4 +1,5 @@
 import { setRevealAttribution, startVoting } from './firebase.js';
+import { sortEntries } from './scoring.js';
 import { showPhaseError } from './uiError.js';
 import {
   buildTikTokPlayer,
@@ -218,7 +219,8 @@ export function render(room, ctx) {
   const round = room.round;
   const roundData = room.rounds?.[round] || {};
   const submissions = roundData.submissions || {};
-  const entries = Object.entries(submissions); // [entryId, entry][]
+  // Random compile-time order (see mergeSubmissions), NOT submitter order.
+  const entries = sortEntries(Object.entries(submissions)); // [entryId, entry][]
   const revealAttribution = !!roundData.revealAttribution;
 
   // The compiled feed is host-only: the host is the one casting to the

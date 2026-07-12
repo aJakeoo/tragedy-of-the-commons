@@ -10,8 +10,16 @@ export function sanitizeKey(raw) {
 // canonical ID. Two players pasting the same video end up as one entry with
 // both names in `contributors`, whatever order they submitted in.
 //
+// Each entry also gets a random `order` index, assigned once here at
+// compile time and persisted with the entry. Without it, entries come out
+// grouped by submitter (player 1's clips, then player 2's, ...), which
+// both telegraphs who submitted what and makes the feed predictable.
+// Shuffling once at compile — rather than per-render — keeps every
+// client's feed and ballot in the same random order, stable across
+// snapshots.
+//
 // playerSubmissions: { [playerId]: { name, links: [{ url, platform, canonicalId, thumbnail, title, author, embedHtml }] } }
-// returns: { [entryId]: { canonicalId, platform, url, thumbnail, title, author, embedHtml, contributors: [{id, name}] } }
+// returns: { [entryId]: { canonicalId, platform, url, thumbnail, title, author, embedHtml, contributors: [{id, name}], order } }
 export function mergeSubmissions(playerSubmissions) {
   const entries = {};
   for (const [playerId, sub] of Object.entries(playerSubmissions || {})) {
@@ -34,7 +42,29 @@ export function mergeSubmissions(playerSubmissions) {
       }
     }
   }
+
+  // Fisher-Yates over the entry ids, then stamp each entry with its slot.
+  const ids = Object.keys(entries);
+  for (let i = ids.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+  }
+  ids.forEach((id, i) => {
+    entries[id].order = i;
+  });
+
   return entries;
+}
+
+// Presentation order for compiled entries: the random compile-time order,
+// with entryId as a deterministic tiebreak for rooms compiled before
+// `order` existed.
+export function sortEntries(entries) {
+  return [...entries].sort(([idA, a], [idB, b]) => {
+    const oa = a.order ?? 0;
+    const ob = b.order ?? 0;
+    return oa - ob || (idA < idB ? -1 : 1);
+  });
 }
 
 export function multiplierFor(entry) {
