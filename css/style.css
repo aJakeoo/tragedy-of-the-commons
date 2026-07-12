@@ -353,10 +353,6 @@ label {
   margin: 0 0 1rem;
 }
 .feed-endcard .card { background: var(--color-card); }
-.feed-endcard #guest-watching-note {
-  color: oklch(80% 0.02 70);
-  text-align: center;
-}
 .feed-endcard .feed-empty { padding: 0 0 1rem; }
 .contributor-tag, .weight-badge {
   display: inline-block;
@@ -372,6 +368,43 @@ label {
   color: var(--color-surface);
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+/* Guest view during the compiled feed — the host casts the clips to the
+   shared screen; guests just get pointed at it. */
+.guest-compiling {
+  text-align: center;
+  padding: 4rem 1.5rem;
+}
+.guest-compiling-icon { font-size: 3rem; margin-bottom: 0.75rem; }
+
+/* Post-submit ballot celebration */
+.ballot-done {
+  position: relative;
+  text-align: center;
+  padding: 3.5rem 1.5rem 2.5rem;
+}
+.ballot-done-mark { font-size: 3.4rem; margin-bottom: 0.5rem; }
+.confetti-layer {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 60;
+}
+.confetti-piece {
+  position: absolute;
+  top: -20px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: confettiFall 3s ease-in forwards;
+}
+@keyframes confettiFall {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0deg); }
+  100% {
+    opacity: 0.9;
+    transform: translate(var(--confetti-drift, 0px), 105vh) rotate(var(--confetti-spin, 720deg));
+  }
 }
 
 /* Voting */
@@ -439,6 +472,36 @@ label {
   flex-shrink: 0;
   transition: transform 0.2s ease;
 }
+.reveal-thumb {
+  position: relative;
+  width: 56px;
+  height: 74px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--color-border-soft);
+}
+.reveal-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.reveal-thumb-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-surface);
+}
+.reveal-thumb-fallback.tiktok { background: linear-gradient(135deg, oklch(30% 0.03 260), oklch(18% 0.02 260)); }
+.reveal-thumb-fallback.instagram { background: linear-gradient(135deg, oklch(60% 0.19 330), oklch(62% 0.16 60)); }
+.reveal-entry.winner .reveal-thumb { width: 84px; height: 112px; }
 .reveal-entry .points.points-final { transform: scale(1.15); }
 .voter-breakdown { margin-top: 0.4rem; display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .voter-line {

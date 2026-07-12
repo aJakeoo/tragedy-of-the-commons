@@ -20,27 +20,29 @@
 //   - A player loaded muted CANNOT be unmuted from the host page: user
 //     activation does not propagate through postMessage, so a relayed
 //     `unMute` gets silently reverted ~2ms after taking effect (Session 7,
-//     reconfirmed Session 8). No error fires.
+//     reconfirmed Session 8). No error fires. The old attemptUnmute path
+//     was removed for this reason — it never once held.
 //   - A player loaded with muted=0 either (a) starts playing with sound —
 //     the explicit play+unMute nudge after onPlayerReady is what makes its
 //     unmuted state stick — or (b) wedges at "buffering" forever with NO
 //     AUTOPLAY_ERROR event, a black card that ignores all commands. Which
 //     one you get is the browser's autoplay-policy call (gesture history,
 //     media-engagement, platform); it cannot be predicted from JS.
-// So every muted=0 load is treated as a gamble with a watchdog
-// (armUnmutedWatchdog): if it isn't PLAYING within the window, reload it
-// muted — muted=1&autoplay=1 is the known-good configuration that always
-// plays. The per-clip flow:
-//   1. the feed's first clip loads muted=0 (sound-on by default when
-//      allowed; watchdog cleans up when not);
-//   2. a muted active clip gets the cheap postMessage `unMute` try; the
-//      revert signature (onMute:false then instant onMute:true) or a
-//      1.2s timer triggers ONE unmuted reload (muted=0&autoplay=1, again
-//      watchdog-guarded);
-//   3. AUTOPLAY_ERROR (3002) on an unmuted load → reload muted;
-//      on a muted load → fallBackToTapToPlay. No retry loops anywhere:
-//      each clip gets at most one unmuted gamble per activation, and a
-//      failed gamble (soundReloadFailed) permanently opts that clip out.
+// So every muted=0 load is a GAMBLE, and it's played two ways:
+//   1. the feed's first clip loads muted=0 outright (nothing to lose —
+//      there's no already-playing player to disturb). A watchdog reloads
+//      it muted if it isn't playing within the window.
+//   2. an already-playing muted clip that should gain sound (the "Tap for
+//      sound" tap, or snapping to a new clip once sound is on) gets a
+//      DOUBLE-BUFFERED gamble (soundGamble): a second, invisible muted=0
+//      iframe loads BEHIND the playing muted one. Only when the hidden
+//      player is confirmed actually playing unmuted does it get promoted
+//      (old iframe removed, new one revealed, seeked to where the muted
+//      one was). If the gamble wedges, the hidden iframe is discarded and
+//      the visible muted playback was never disturbed — the gamble costs
+//      nothing. One gamble per clip; a loss (soundGambleFailed) opts that
+//      clip out permanently.
+//   3. AUTOPLAY_ERROR (3002) on a muted load → fallBackToTapToPlay.
 //
 // Dead end, do not revisit: preloading background players as
 // unmuted-but-paused (muted=0&autoplay=0) so a snap only needs `play`.
@@ -84,15 +86,17 @@ function markSoundEnabled() {
   window.dispatchEvent(new CustomEvent('totc-sound-enabled'));
 }
 
-// Called from a genuine click handler (the feed's sound button) — the tap
-// gives the page sticky user activation, which is what makes an unmuted
-// player reload allowed to autoplay with sound.
+// Called from a genuine click handler (the feed's sound button). Starting
+// the gamble iframe's load synchronously inside the tap maximizes the
+// chance the browser honors autoplay delegation for it (transient
+// activation is still live, on top of the sticky activation the tap
+// grants the page).
 export function enableSound() {
   markSoundEnabled();
   const info = cardInfo.get(activeContainer);
-  if (info?.platform === 'tiktok' && info.iframe) {
-    info.reloadedForSound = false;
-    attemptUnmute(activeContainer);
+  if (info?.platform === 'tiktok' && info.iframe && info.loadedMuted) {
+    info.soundGambleFailed = false; // an explicit tap earns a fresh try
+    soundGamble(activeContainer);
   }
 }
 
@@ -115,15 +119,15 @@ function playerIframe(canonicalId, muted) {
   return iframe;
 }
 
-// Swaps in a brand-new player iframe (fresh load = fresh autoplay-policy
-// evaluation, which is the whole point when muted=false).
+// Swaps in a brand-new player iframe in place (fresh load = fresh
+// autoplay-policy evaluation). Only used for the first clip's direct
+// unmuted load and its muted recovery — everything else goes through the
+// non-destructive soundGamble below.
 function reloadPlayer(container, muted) {
   const info = cardInfo.get(container);
   if (!info?.iframe || !info.canonicalId) return;
-  clearTimeout(info.unmuteTimer);
   clearTimeout(info.watchdogTimer);
-  info.unmutePending = false;
-  info.sawUnmuteEffect = false;
+  cancelGamble(container);
   const fresh = playerIframe(info.canonicalId, muted);
   info.iframe.replaceWith(fresh);
   info.iframe = fresh;
@@ -131,15 +135,17 @@ function reloadPlayer(container, muted) {
   info.loadedMuted = muted;
   info.muteState = undefined;
   info.lastState = undefined;
+  info.currentTime = 0;
   if (!muted) armUnmutedWatchdog(container);
 }
 
 // An unmuted load is a gamble the browser can lose silently: when its
 // autoplay policy blocks sound-on playback it does NOT reliably surface
 // AUTOPLAY_ERROR — the player just wedges at "buffering" forever (observed
-// live). So every muted=0 iframe gets a watchdog: if it isn't actually
-// PLAYING (state 1) within the window, reload it muted — muted autoplay is
-// the known-good configuration — and stop gambling on this clip.
+// live). This watchdog covers the feed's FIRST clip, which loads muted=0
+// in place: if it isn't actually PLAYING (state 1) within the window,
+// reload it muted — the known-good configuration — and stop gambling on
+// this clip.
 function armUnmutedWatchdog(container) {
   const info = cardInfo.get(container);
   if (!info) return;
@@ -148,39 +154,77 @@ function armUnmutedWatchdog(container) {
     if (!cardInfo.has(container)) return;
     if (info.loadedMuted !== false || info.fellBack) return;
     if (info.lastState === 1) return; // playing — the gamble paid off
-    info.soundReloadFailed = true;
+    info.soundGambleFailed = true;
     reloadPlayer(container, true);
   }, 8000);
 }
 
-// Cheap unmute first, unmuted reload as the fallback. The player reports
-// its real mute state via onMute events, and the failure signature —
-// onMute:false then an instant onMute:true revert — is detected in the
-// message listener, which calls soundReloadIfAllowed immediately. This
-// timer is only the backstop for "no onMute events arrived at all."
-function attemptUnmute(container) {
+// The double-buffered sound gamble: load a SECOND, invisible muted=0
+// player behind the visible muted one. Promote it only once it's
+// confirmed playing unmuted (see the message listener); discard it on
+// timeout/error with the visible playback never disturbed. The visible
+// muted player keeps running the whole time, so a lost gamble costs the
+// viewer nothing.
+function soundGamble(container) {
   const info = cardInfo.get(container);
-  if (!info?.iframe || !info.ready || info.unmutePending) return;
-  info.unmutePending = true;
-  info.sawUnmuteEffect = false;
-  postToPlayer(info.iframe, 'unMute');
-  clearTimeout(info.unmuteTimer);
-  info.unmuteTimer = setTimeout(() => {
-    info.unmutePending = false;
-    if (info.muteState === false) return; // unmute held — done
-    soundReloadIfAllowed(container);
-  }, 1200);
+  if (!info || info.platform !== 'tiktok' || !info.iframe) return;
+  if (info.fellBack || info.soundGambleFailed || info.pending) return;
+  if (info.loadedMuted === false) return; // already an unmuted player
+  if (container !== activeContainer) return;
+
+  const pending = playerIframe(info.canonicalId, false);
+  pending.style.position = 'absolute';
+  pending.style.inset = '0';
+  pending.style.width = '100%';
+  pending.style.height = '100%';
+  pending.style.opacity = '0';
+  pending.style.pointerEvents = 'none';
+  info.pending = pending;
+  info.pendingReady = false;
+  info.pendingMute = undefined;
+  info.pendingState = undefined;
+  container.appendChild(pending);
+
+  clearTimeout(info.gambleTimer);
+  info.gambleTimer = setTimeout(() => {
+    if (info.pending) {
+      cancelGamble(container);
+      info.soundGambleFailed = true;
+    }
+  }, 10000);
 }
 
-// Reload this clip's player unmuted (the path that actually produces sound
-// in Chrome) — once per activation, never after an unmuted load already
-// failed autoplay, and only while it's the active clip with sound on.
-function soundReloadIfAllowed(container) {
+function cancelGamble(container) {
   const info = cardInfo.get(container);
-  if (!info || container !== activeContainer || !soundEnabled) return;
-  if (info.reloadedForSound || info.soundReloadFailed) return;
-  info.reloadedForSound = true;
-  reloadPlayer(container, false);
+  if (!info) return;
+  clearTimeout(info.gambleTimer);
+  info.pending?.remove();
+  info.pending = null;
+}
+
+// The hidden gamble player is playing unmuted — swap it in: reveal it,
+// drop the old muted player, and pick up roughly where the muted playback
+// was.
+function promotePending(container) {
+  const info = cardInfo.get(container);
+  if (!info?.pending) return;
+  clearTimeout(info.gambleTimer);
+  const old = info.iframe;
+  const resumeAt = Math.floor(info.currentTime || 0);
+  info.iframe = info.pending;
+  info.pending = null;
+  info.iframe.style.position = '';
+  info.iframe.style.inset = '';
+  info.iframe.style.opacity = '';
+  info.iframe.style.pointerEvents = '';
+  old?.remove();
+  info.ready = true;
+  info.loadedMuted = false;
+  info.muteState = false;
+  info.lastState = 1;
+  info.currentTime = 0;
+  if (resumeAt > 1) postToPlayer(info.iframe, 'seekTo', resumeAt);
+  markSoundEnabled();
 }
 
 function rebuildContainer(container) {
@@ -205,6 +249,9 @@ function stopContainer(container) {
   if (!info) return;
 
   if (info.platform === 'tiktok' && info.iframe) {
+    // Scrolled away mid-gamble: discard the hidden attempt (it hasn't
+    // proven itself, and it would start making noise for the wrong card).
+    cancelGamble(container);
     // If the player isn't ready yet, there's nothing playing to stop — and
     // its own onPlayerReady handler (below) will pause+mute it on arrival
     // once it sees it isn't the active container.
@@ -228,12 +275,9 @@ function startContainer(container) {
   if (info.ready) {
     postToPlayer(info.iframe, 'play');
     // A player that loaded unmuted already has sound permission — `play`
-    // alone resumes it audibly. Only muted-loaded players need the
-    // unmute-attempt/reload dance.
-    if (soundEnabled && info.loadedMuted !== false) {
-      info.reloadedForSound = false; // fresh activation earns one reload
-      attemptUnmute(container);
-    }
+    // alone resumes it audibly. A muted one gets the non-destructive
+    // sound gamble (no-op if this clip already lost one).
+    if (soundEnabled && info.loadedMuted) soundGamble(container);
   }
   // If not ready yet, onPlayerReady checks `container === activeContainer`
   // itself — nothing to queue here.
@@ -283,27 +327,62 @@ function ensureTikTokMessageListener() {
 
     let container = null;
     let info = null;
+    let fromPending = false;
     for (const [c, i] of cardInfo) {
       if (i.iframe && i.iframe.contentWindow === event.source) {
         container = c;
         info = i;
         break;
       }
+      if (i.pending && i.pending.contentWindow === event.source) {
+        container = c;
+        info = i;
+        fromPending = true;
+        break;
+      }
     }
     if (!info) return;
+
+    if (fromPending) {
+      // Events from a hidden sound-gamble player. It only graduates to
+      // visible once confirmed playing unmuted; anything else eventually
+      // hits the gamble timeout and gets discarded, with the visible
+      // muted playback never disturbed.
+      if (data.type === 'onPlayerReady') {
+        info.pendingReady = true;
+        if (container !== activeContainer) {
+          cancelGamble(container); // user scrolled on — moot
+        } else {
+          postToPlayer(info.pending, 'play');
+          postToPlayer(info.pending, 'unMute');
+        }
+      } else if (data.type === 'onMute') {
+        info.pendingMute = data.value;
+        if (data.value === false && info.pendingState === 1) promotePending(container);
+      } else if (data.type === 'onStateChange') {
+        info.pendingState = data.value;
+        if (data.value === 1 && info.pendingMute === false) promotePending(container);
+      } else if (data.type === 'onPlayerError') {
+        if (data.value?.errorCode === 3002) {
+          cancelGamble(container);
+          info.soundGambleFailed = true;
+        }
+      }
+      return;
+    }
 
     if (data.type === 'onPlayerReady') {
       info.ready = true;
       if (container === activeContainer) {
         if (info.loadedMuted === false) {
-          // Unmuted load: nudge it. The explicit play+unMute after ready is
-          // what makes the unmuted state stick when it's going to stick at
-          // all (verified live); if it doesn't start, the watchdog armed at
-          // load time reloads this clip muted.
+          // The first clip's direct unmuted load: nudge it. The explicit
+          // play+unMute after ready is what makes the unmuted state stick
+          // when it's going to stick at all (verified live); if it doesn't
+          // start, the watchdog armed at load time reloads this clip muted.
           postToPlayer(info.iframe, 'play');
           postToPlayer(info.iframe, 'unMute');
         } else if (soundEnabled) {
-          attemptUnmute(container);
+          soundGamble(container);
         }
       } else {
         // A background clip that autoplayed muted on render but never
@@ -320,15 +399,10 @@ function ensureTikTokMessageListener() {
         // unmuted load also reports onMute:false without ever playing —
         // that must not count, so gate on lastState. (onStateChange
         // handles the arrival orders where playing starts after this.)
-        if (info.lastState === 1) markSoundEnabled();
-        if (info.unmutePending) info.sawUnmuteEffect = true;
-      } else if (info.unmutePending && info.sawUnmuteEffect) {
-        // The confirmed failure signature: our unMute took effect and the
-        // browser instantly reverted it. No point waiting for the timer —
-        // reload unmuted now.
-        clearTimeout(info.unmuteTimer);
-        info.unmutePending = false;
-        soundReloadIfAllowed(container);
+        if (info.lastState === 1) {
+          markSoundEnabled();
+          cancelGamble(container); // sound achieved without the gamble
+        }
       }
     } else if (data.type === 'onStateChange') {
       info.lastState = data.value;
@@ -340,24 +414,16 @@ function ensureTikTokMessageListener() {
       // Actually playing while unmuted — the session's sound opt-in, for
       // whichever of the two events (playing / unmuted) arrived second.
       if (data.value === 1 && info.muteState === false) markSoundEnabled();
-      // 1 = playing. Safety net in case autoplay actually kicks in after
-      // onPlayerReady fires (ready just means loaded, not yet playing).
-      if (
-        data.value === 1 &&
-        container === activeContainer &&
-        soundEnabled &&
-        info.loadedMuted !== false &&
-        info.muteState !== false
-      ) {
-        attemptUnmute(container);
-      }
+    } else if (data.type === 'onCurrentTime') {
+      // Tracked so a promoted sound player can pick up where the muted
+      // playback was (see promotePending).
+      info.currentTime = data.value?.currentTime || 0;
     } else if (data.type === 'onPlayerError') {
       if (data.value?.errorCode === 3002) {
         if (info.loadedMuted === false) {
-          // The unmuted reload itself got autoplay-blocked. Go back to the
-          // known-good muted autoplay for this clip and stop trying — the
-          // player's own speaker icon is the remaining path to sound.
-          info.soundReloadFailed = true;
+          // The first clip's direct unmuted load got autoplay-blocked with
+          // an actual error for once — recover to muted right away.
+          info.soundGambleFailed = true;
           reloadPlayer(container, true);
         } else {
           fallBackToTapToPlay(container);
@@ -374,8 +440,8 @@ function ensureTikTokMessageListener() {
 function fallBackToTapToPlay(container) {
   const info = cardInfo.get(container);
   if (!info || info.fellBack) return;
-  clearTimeout(info.unmuteTimer);
   clearTimeout(info.watchdogTimer);
+  cancelGamble(container);
   info.fellBack = true;
   info.iframe = null;
   container.innerHTML = '';
@@ -405,12 +471,14 @@ export function registerEmbedCard(container, info) {
     loadedMuted: true,
     muteState: undefined,
     lastState: undefined,
-    unmutePending: false,
-    unmuteTimer: 0,
+    currentTime: 0,
     watchdogTimer: 0,
-    sawUnmuteEffect: false,
-    reloadedForSound: false,
-    soundReloadFailed: false,
+    pending: null,
+    pendingReady: false,
+    pendingMute: undefined,
+    pendingState: undefined,
+    gambleTimer: 0,
+    soundGambleFailed: false,
     ...info,
   });
 }
@@ -420,8 +488,8 @@ export function registerEmbedCard(container, info) {
 // the user's opt-in covers the whole session.
 export function resetKnownEmbeds() {
   for (const info of cardInfo.values()) {
-    clearTimeout(info.unmuteTimer);
     clearTimeout(info.watchdogTimer);
+    clearTimeout(info.gambleTimer);
   }
   cardInfo.clear();
   activeContainer = null;

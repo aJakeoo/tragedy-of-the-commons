@@ -176,7 +176,6 @@ function buildEndCard(entries) {
     inner.appendChild(done);
   }
   inner.appendChild(document.getElementById('host-presenter-controls'));
-  inner.appendChild(document.getElementById('guest-watching-note'));
   card.appendChild(inner);
   return card;
 }
@@ -186,12 +185,11 @@ function buildEndCard(entries) {
 // shouldn't reload every embed and reset any playback in progress).
 function renderGrid(entries) {
   const feed = document.getElementById('presenter-grid');
-  // The host controls / guest note live inside the end card between
-  // renders — park them back on the section before wiping the feed so
-  // innerHTML='' doesn't destroy them.
+  // The host controls live inside the end card between renders — park
+  // them back on the section before wiping the feed so innerHTML=''
+  // doesn't destroy them.
   const phase = document.getElementById('phase-compiling');
   phase.appendChild(document.getElementById('host-presenter-controls'));
-  phase.appendChild(document.getElementById('guest-watching-note'));
   feed.innerHTML = '';
   resetKnownEmbeds();
   feedObserver?.disconnect();
@@ -222,6 +220,15 @@ export function render(room, ctx) {
   const submissions = roundData.submissions || {};
   const entries = Object.entries(submissions); // [entryId, entry][]
   const revealAttribution = !!roundData.revealAttribution;
+
+  // The compiled feed is host-only: the host is the one casting to the
+  // shared screen, and everyone else watches THAT, not their own phone.
+  // Guests get a lightweight "eyes on the big screen" view and never load
+  // a single platform iframe — which also keeps their devices quiet and
+  // cheap during the round.
+  document.getElementById('presenter-feed-wrap').classList.toggle('hidden', !ctx.isHost);
+  document.getElementById('guest-compiling-view').classList.toggle('hidden', ctx.isHost);
+  if (!ctx.isHost) return;
 
   if (presenterRound !== round) {
     presenterRound = round;
@@ -274,13 +281,9 @@ export function render(room, ctx) {
     if (entry) renderContributors(card, entry, revealAttribution);
   });
 
-  document.getElementById('host-presenter-controls').classList.toggle('hidden', !ctx.isHost);
-  document.getElementById('guest-watching-note').classList.toggle('hidden', ctx.isHost);
-
-  if (ctx.isHost) {
-    document.getElementById('attribution-toggle').checked = revealAttribution;
-    if (!startingVoting) {
-      document.getElementById('start-voting-btn').disabled = entries.length === 0;
-    }
+  document.getElementById('host-presenter-controls').classList.remove('hidden');
+  document.getElementById('attribution-toggle').checked = revealAttribution;
+  if (!startingVoting) {
+    document.getElementById('start-voting-btn').disabled = entries.length === 0;
   }
 }

@@ -37,9 +37,16 @@
        last slide carries the host's Start-voting controls — see
        js/presenter.js) -->
   <section id="phase-compiling" class="hidden">
-    <div class="presenter-feed-wrap">
+    <div class="presenter-feed-wrap hidden" id="presenter-feed-wrap">
       <div id="presenter-grid" class="presenter-feed"></div>
       <button id="feed-sound-btn" class="feed-sound-btn hidden">Tap for sound</button>
+    </div>
+
+    <!-- Guests don't get the feed — the host casts it to the shared screen. -->
+    <div id="guest-compiling-view" class="guest-compiling hidden">
+      <div class="guest-compiling-icon">&#128250;</div>
+      <h2>Eyes on the big screen</h2>
+      <p class="muted">The host is playing this round's clips. Voting opens here when the feed's done.</p>
     </div>
 
     <div id="host-presenter-controls" class="card hidden">
@@ -49,16 +56,24 @@
       </label>
       <button class="primary" id="start-voting-btn" style="margin-top:1rem">Start voting</button>
     </div>
-
-    <p class="muted hidden" id="guest-watching-note">The host will start voting when everyone's seen the round.</p>
   </section>
 
   <!-- VOTING -->
   <section id="phase-voting" class="hidden">
-    <p>Points remaining: <span class="budget-remaining" id="budget-remaining"></span></p>
-    <div id="ballot-entries"></div>
-    <button class="primary" id="submit-ballot-btn">Submit ballot</button>
-    <p class="muted hidden" id="ballot-submitted-note">Ballot submitted! You can change it and resubmit until the host reveals results.</p>
+    <div id="ballot-form-view">
+      <p>Points remaining: <span class="budget-remaining" id="budget-remaining"></span></p>
+      <div id="ballot-entries"></div>
+      <button class="primary" id="submit-ballot-btn">Submit ballot</button>
+    </div>
+
+    <!-- Post-submit celebration screen (see js/voting.js) -->
+    <div id="ballot-done-view" class="ballot-done hidden">
+      <div id="confetti-layer" class="confetti-layer" aria-hidden="true"></div>
+      <div class="ballot-done-mark">&#127881;</div>
+      <h2>Ballot in!</h2>
+      <p class="muted">Your votes are locked with the tribunal. Results when the host calls it.</p>
+      <button id="change-ballot-btn">Change my ballot</button>
+    </div>
 
     <div class="card">
       <p class="muted" id="voting-progress"></p>

@@ -5,7 +5,7 @@ import { ordinal } from './format.js';
 
 let animatedForRound = null;
 let cachedResults = null;
-let tallyRafId = null;
+let tallyTimer = 0;
 const pendingTimers = [];
 
 const ROW_STAGGER_MS = 450; // matches each <li>'s own CSS entrance stagger
@@ -21,6 +21,11 @@ function contributorsLabel(entry) {
   return `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]} — submitted this together`;
 }
 
+// Timer-driven rather than requestAnimationFrame on purpose: rAF rides
+// the rendering-frame pipeline, which was observed stalling outright under
+// heavy embed-iframe load (same failure mode as IntersectionObserver /
+// scroll events, see presenter.js) — an rAF loop here left the reveal
+// permanently stuck at 0. Timers keep firing through those stalls.
 function runTallyCountUp(totalRawPoints, onDone) {
   const stage = document.getElementById('tally-stage');
   stage.innerHTML = '<p class="muted" style="text-align:center">Tallying votes&hellip;</p><div class="tally-count" id="tally-number">0</div>';
@@ -28,16 +33,15 @@ function runTallyCountUp(totalRawPoints, onDone) {
   const durationMs = 900;
   const start = performance.now();
 
-  function frame(now) {
-    const t = Math.min(1, (now - start) / durationMs);
+  clearInterval(tallyTimer);
+  tallyTimer = setInterval(() => {
+    const t = Math.min(1, (performance.now() - start) / durationMs);
     numberEl.textContent = Math.round(t * totalRawPoints);
-    if (t < 1) {
-      tallyRafId = requestAnimationFrame(frame);
-    } else {
+    if (t >= 1) {
+      clearInterval(tallyTimer);
       onDone();
     }
-  }
-  tallyRafId = requestAnimationFrame(frame);
+  }, 33);
 }
 
 // Reveals a single row's voter breakdown ("Tommy +4", then "Randy +2")
@@ -90,18 +94,43 @@ function revealVoterBreakdown(row, result, players, startDelayMs) {
   return flourishDelay + 300;
 }
 
+// A thumbnail for the podium — the real video thumbnail when we have one
+// (TikTok oEmbed provides it; Instagram can't, see linkValidation.js), a
+// platform-colored placeholder otherwise. TikTok thumbnail URLs are
+// signed and expire after a while, so a load failure falls back to the
+// placeholder too.
+function buildThumb(r) {
+  const wrap = document.createElement('span');
+  wrap.className = 'reveal-thumb';
+  const placeholder = document.createElement('span');
+  placeholder.className = `reveal-thumb-fallback ${r.platform}`;
+  placeholder.textContent = r.platform === 'tiktok' ? 'TT' : 'IG';
+  wrap.appendChild(placeholder);
+  if (r.thumbnail) {
+    const img = document.createElement('img');
+    img.src = r.thumbnail;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.onerror = () => img.remove();
+    wrap.appendChild(img);
+  }
+  return wrap;
+}
+
 function renderLeaderboard(results, players) {
   const list = document.getElementById('reveal-list');
   list.innerHTML = '';
 
-  // Reveal order is lowest rank to highest, winner last, per spec.
-  const revealOrder = [...results].reverse();
+  // Podium only: the top three, laid out winner-first. The entrance
+  // animation still plays bottom-up — 3rd pops in first, champion lands
+  // last — so the suspense survives the ordering fix.
+  const podium = results.slice(0, 3);
   let maxSettleMs = 0;
 
-  revealOrder.forEach((r, i) => {
+  podium.forEach((r, i) => {
     const li = document.createElement('li');
     li.className = 'reveal-entry' + (r.rank === 1 ? ' winner' : '');
-    const rowDelayMs = i * ROW_STAGGER_MS;
+    const rowDelayMs = (podium.length - 1 - i) * ROW_STAGGER_MS;
     li.style.animationDelay = `${rowDelayMs / 1000}s`;
 
     const rank = document.createElement('span');
@@ -124,7 +153,7 @@ function renderLeaderboard(results, players) {
     points.className = 'points';
     points.textContent = '0 pts';
 
-    li.append(rank, info, points);
+    li.append(rank, buildThumb(r), info, points);
     list.appendChild(li);
 
     const voterStartDelay = rowDelayMs + ROW_ENTRANCE_BUFFER_MS;
@@ -162,7 +191,7 @@ export function render(room, ctx) {
     return;
   }
   animatedForRound = round;
-  if (tallyRafId) cancelAnimationFrame(tallyRafId);
+  clearInterval(tallyTimer);
   pendingTimers.forEach(clearTimeout);
   pendingTimers.length = 0;
 

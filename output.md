@@ -656,3 +656,78 @@ next check, and is exactly the environment the user is testing in.
 was already true for a brand-new room (contributor names showed without
 the host touching the toggle) — worth a look next session if "hidden by
 default" is still the intent.
+
+---
+
+## Session 9 — Host-only feed, ballot confetti, top-3 reveal, double-buffered sound
+
+**User feedback driving this session:** auto-unmute still not working on
+the phone; only the host (the one casting to the shared screen) should see
+the compiled videos; ballot submission needs a real "you're done" moment
+(confetti) instead of a near-identical screen; the reveal was in reverse
+order and should show only the top three, with thumbnails.
+
+**Host-only feed.** presenter.render now short-circuits for guests: the
+full-screen feed (and every platform iframe) is host-only, and guests get
+a lightweight "Eyes on the big screen" view during compiling. Verified
+live: guest tab renders zero iframes and zero cards. Side benefit —
+guests' phones do no embed work at all during the round.
+
+**Ballot confetti screen.** Voting now has two views. Submitting swaps the
+form for a "Ballot in!" celebration with an 80-piece CSS confetti burst
+raining from the top (fixed full-viewport layer, randomized drift/spin/
+timing per piece, self-cleans after 6s), plus a "Change my ballot" button
+that returns to the form (draft preserved). Verified live: submit →
+confetti + done view; change → form; resubmit → confetti again; the
+progress card and host's Reveal button stay visible below.
+
+**Top-3 reveal.** The leaderboard now renders ONLY the podium (top three
+by weighted points), laid out winner-first top-down — fixing the "reverse
+order" complaint — while the entrance animation still plays bottom-up
+(3rd in first, champion lands last) to keep the suspense. Each row gets a
+thumbnail: the real video thumbnail for TikTok (oEmbed `thumbnail_url`,
+already captured at submission time and carried through the merge — no
+data-model change needed), a platform-branded gradient tile for Instagram
+(no client-accessible thumbnail exists, per Session 1) or when a TikTok
+thumbnail URL has expired (they're signed + short-lived; `onerror` falls
+back). Winner's thumbnail renders larger inside the gold card. Verified
+live: 1st/2nd/3rd correct per the actual ballots, real TikTok thumbnails
+rendering, IG fallback tile, voter chips animating in.
+
+**Reveal robustness bug found and fixed in passing:** the tally count-up
+used requestAnimationFrame, which rides the same rendering-frame pipeline
+that Session 8 caught stalling under embed load (IO callbacks and scroll
+events both stop). On a stalled tab the reveal sat frozen at "Tallying
+votes… 0" forever — reproduced live. Now timer-driven (setInterval 33ms),
+which keeps firing through stalls; reproduced the fix live too.
+
+**Sound: double-buffered gamble (replaces the in-place unmuted reload).**
+The postMessage-unmute path is gone entirely — it never once held (the
+~2ms revert, Sessions 7-8). New model in embeds.js:
+- The feed's first clip still loads muted=0 directly (nothing's playing
+  yet, so nothing to lose), watchdog-guarded as before.
+- Every other "this clip should gain sound" moment (the Tap-for-sound tap,
+  snapping to a new clip once sound is on) runs `soundGamble`: a SECOND,
+  invisible muted=0 player loads absolutely-positioned behind the visible
+  muted one. Only when the hidden player is confirmed actually playing
+  unmuted (state 1 + onMute:false, either order) is it promoted — old
+  iframe removed, new one revealed, `seekTo` the muted playback's last
+  reported time so it picks up where the viewer was. On timeout (10s) or
+  AUTOPLAY_ERROR it's discarded invisibly: the visible muted playback is
+  never interrupted, so a lost gamble costs the viewer NOTHING (the old
+  in-place reload showed a black card for up to 8s on a loss).
+- The tap handler starts the gamble iframe's load synchronously inside the
+  click, so it loads under both transient and sticky activation — the
+  strongest position mobile Chrome's autoplay delegation offers.
+- Scrolling away mid-gamble cancels it; the user unmuting via the player's
+  own speaker icon cancels it too (sound achieved) and records the
+  session opt-in.
+
+**QA caveat, same as Session 8:** TikTok's embed player was still refusing
+to start playback for this IP during QA (every player wedged at buffering
+regardless of mute config — throttling from the day's load volume), so
+the gamble's win path (promote + seek) couldn't be observed end-to-end on
+this desktop; its state machine, cancellation paths, and the guaranteed
+non-disruption of the visible player were verified by code-path review
+and the absence of console errors with pending iframes present. Phone
+testing on the deployed site is the real check for the win path.
