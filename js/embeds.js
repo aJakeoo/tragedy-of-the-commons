@@ -50,17 +50,34 @@
 // never fires onPlayerReady, and ignores every postMessage command.
 // autoplay=1 is effectively required for the player to initialize.
 //
-// Instagram has no equivalent. Its oEmbed response is a <blockquote> that
-// Instagram's own embed.js turns into an iframe with zero configurability -
-// no autoplay, no control channel. Instagram clips keep tap-to-play, and
-// the only way to stop one is still tearing its container down and
-// rebuilding it from the original blockquote markup. (Same applies to a
-// TikTok clip that has fallen back to its own blockquote embed - see
-// fallBackToTapToPlay.) Historical note: resetting `iframe.src` on a
-// blockquote-built embed breaks it permanently (Session 4) - teardown to
-// the original blockquote markup is the only working stop for those. Our
-// own player/v1 iframes are plain URLs we control, so replacing them
-// outright (reloadPlayer below) is safe.
+// Instagram has no equivalent, and that ceiling is now verified at the
+// source, not assumed (Session 10): the embed page registers ZERO usable
+// `message` listeners (only a setImmediate-polyfill self-listener), and
+// embed.js's own protocol is iframe->parent only (MEASURE/MOUNTED/
+// UNMOUNTING height reports). There is no autoplay, no play/pause/mute
+// command, nothing. Instagram clips are tap-to-play, full stop.
+//
+// What DID change in Session 10: Instagram cards now skip the blockquote +
+// embed.js dance entirely and render our own iframe pointed straight at
+// instagram.com/p/{shortcode}/embed/ - the exact URL embed.js would have
+// generated anyway (verified: /p/ serves reels too, identical render).
+// That removes the loader script, the process() re-scan, and the SPA
+// timing risk, and makes the iframe a plain URL WE control - so stopping
+// a clip is replacing our own iframe, same class of operation as TikTok's
+// reloadPlayer, not the fragile blockquote teardown. A dead/private reel
+// renders Instagram's own "this post may have been removed" card inside
+// the iframe, which is exactly the right failure UX and costs us nothing.
+// (Historical note kept for the TikTok fallback path below: resetting
+// `iframe.src` on an EMBED.JS-BUILT iframe breaks it permanently
+// (Session 4) - that teardown-to-blockquote rule still applies to TikTok
+// clips that have fallen back to their blockquote embed.)
+//
+// Because Instagram cannot autoplay, an Instagram card that was never
+// tapped is never playing - so scroll-away only tears down cards the user
+// actually tapped into (`info.tapped`, set by the window-blur focus trick
+// when a tap lands inside a card's iframe). Untapped cards keep their
+// loaded poster untouched, which kills the old rebuild-every-card-on-
+// every-snap reload storm.
 
 const TIKTOK_PLAYER_ORIGIN = 'https://www.tiktok.com';
 
@@ -230,11 +247,12 @@ function promotePending(container) {
 function rebuildContainer(container) {
   const info = cardInfo.get(container);
   if (!info) return;
-  container.innerHTML = '';
   if (info.platform === 'tiktok' && info.embedHtml) {
+    container.innerHTML = '';
     container.appendChild(buildTikTokBlockquote(info.embedHtml));
-  } else {
-    container.appendChild(buildInstagramBlockquote(info.url));
+  } else if (info.platform === 'instagram') {
+    container.innerHTML = '';
+    container.appendChild(buildInstagramPlayer(container));
   }
 }
 
@@ -259,10 +277,15 @@ function stopContainer(container) {
     return;
   }
 
-  if (container.querySelector('iframe')) {
+  // Tap-to-play embeds (Instagram, and TikTok clips fallen back to their
+  // blockquote) cannot autoplay, so a card the user never tapped into is
+  // guaranteed silent - leave its loaded poster alone. Only a tapped card
+  // might be playing, and teardown/rebuild is the only stop that exists
+  // for it.
+  if (info.tapped && container.querySelector('iframe')) {
     rebuildContainer(container);
+    info.tapped = false;
     if (info.platform === 'tiktok') loadTikTokEmbedScript();
-    else processInstagramEmbeds();
   }
 }
 
@@ -284,10 +307,16 @@ function startContainer(container) {
 }
 
 // The feed's IntersectionObserver (presenter.js) calls this as cards snap
-// into view; the window-blur focus trick below also calls it when the user
-// taps directly into a clip's iframe.
-export function activateContainer(container) {
-  if (container === activeContainer || !cardInfo.has(container)) return;
+// into view; the window-blur focus trick below also calls it (with
+// viaTap) when the user taps directly into a clip's iframe. viaTap is
+// what marks a tap-to-play embed as possibly-playing (`info.tapped`), so
+// it must be recorded even when the tapped card is already the active one
+// - that's the normal case: snap to a card, then tap its play button.
+export function activateContainer(container, viaTap = false) {
+  const info = cardInfo.get(container);
+  if (!info) return;
+  if (viaTap) info.tapped = true;
+  if (container === activeContainer) return;
   activeContainer = container;
   for (const c of cardInfo.keys()) {
     if (c !== container) stopContainer(c);
@@ -312,7 +341,7 @@ function ensureFocusListener() {
       const active = document.activeElement;
       if (active?.tagName !== 'IFRAME') return;
       const container = active.closest('.presenter-embed');
-      if (container) activateContainer(container);
+      if (container) activateContainer(container, true);
     }, 0);
   });
 }
@@ -467,6 +496,7 @@ export function registerEmbedCard(container, info) {
   cardInfo.set(container, {
     ready: false,
     fellBack: false,
+    tapped: false,
     iframe: null,
     loadedMuted: true,
     muteState: undefined,
@@ -526,9 +556,10 @@ export function buildTikTokPlayer(container) {
 
 let tiktokScriptTag = null;
 
-// Only used now as a fallback path (see fallBackToTapToPlay and the
-// Instagram-style teardown in stopContainer) - TikTok's Embed Player iframe
-// above needs no loader script of its own.
+// Only used now as a fallback path (see fallBackToTapToPlay, and the
+// tapped-card teardown in stopContainer re-rendering such a fallen-back
+// clip) - TikTok's Embed Player iframe above needs no loader script of
+// its own.
 //
 // TikTok's oEmbed response includes ready-made embed HTML (a <blockquote>
 // plus a loader script) - see linkValidation.js's `embedHtml` field. Their
@@ -551,42 +582,32 @@ export function buildTikTokBlockquote(embedHtml) {
   return wrap.firstElementChild;
 }
 
-let instagramScriptPromise = null;
-
-function loadInstagramScript() {
-  if (window.instgrm) return Promise.resolve();
-  if (!instagramScriptPromise) {
-    instagramScriptPromise = new Promise(resolve => {
-      const script = document.createElement('script');
-      script.async = true;
-      script.src = 'https://www.instagram.com/embed.js';
-      script.onload = resolve;
-      document.body.appendChild(script);
-    });
+// Builds an Instagram embed iframe for the card already registered at
+// `container` (via registerEmbedCard). /p/{shortcode}/embed/ is the same
+// URL Instagram's embed.js generates from a blockquote, minus the loader
+// script and its SPA re-scan dance - and it serves reels and video posts
+// alike (verified live, Session 10). Tap-to-play is the ceiling: the
+// embed page has no autoplay and accepts no commands, so all this iframe
+// needs is to exist. A dead or private link renders Instagram's own
+// "post may have been removed" card inside the frame. If the entry
+// somehow has no shortcode, fall back to a plain outbound link.
+export function buildInstagramPlayer(container) {
+  const info = cardInfo.get(container);
+  if (!info?.canonicalId) {
+    const wrap = document.createElement('div');
+    const link = document.createElement('a');
+    link.href = info?.url || 'https://www.instagram.com/';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = info?.platform === 'tiktok' ? 'Open on TikTok' : 'Open on Instagram';
+    wrap.appendChild(link);
+    return wrap;
   }
-  return instagramScriptPromise;
-}
-
-export function buildInstagramBlockquote(url) {
-  const blockquote = document.createElement('blockquote');
-  blockquote.className = 'instagram-media';
-  blockquote.setAttribute('data-instgrm-permalink', url);
-  blockquote.setAttribute('data-instgrm-version', '14');
-  blockquote.style.margin = '0';
-  const link = document.createElement('a');
-  link.href = url;
-  link.target = '_blank';
-  link.rel = 'noopener noreferrer';
-  link.textContent = 'View on Instagram';
-  blockquote.appendChild(link);
-  return blockquote;
-}
-
-// Instagram's embed.js exposes a documented `Embeds.process()` call that
-// rescans the DOM for new `.instagram-media` blockquotes, unlike TikTok's -
-// so no script-tag-swapping trick is needed, just call this after inserting
-// fresh blockquotes (works for one or many at once).
-export async function processInstagramEmbeds() {
-  await loadInstagramScript();
-  window.instgrm?.Embeds?.process();
+  const iframe = document.createElement('iframe');
+  iframe.src = `https://www.instagram.com/p/${encodeURIComponent(info.canonicalId)}/embed/`;
+  iframe.allow = 'encrypted-media; fullscreen';
+  iframe.allowFullscreen = true;
+  iframe.style.border = 'none';
+  iframe.title = 'Instagram video player';
+  return iframe;
 }

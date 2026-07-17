@@ -3,8 +3,7 @@ import { sortEntries } from './scoring.js';
 import { showPhaseError } from './uiError.js';
 import {
   buildTikTokPlayer,
-  buildInstagramBlockquote,
-  processInstagramEmbeds,
+  buildInstagramPlayer,
   registerEmbedCard,
   resetKnownEmbeds,
   activateContainer,
@@ -39,9 +38,10 @@ function buildCard(entryId, entry) {
   if (entry.platform === 'tiktok' && entry.canonicalId) {
     embedContainer.appendChild(buildTikTokPlayer(embedContainer));
   } else {
-    // Instagram links (and a TikTok entry with no video ID for some
-    // reason) fall back to Instagram's own embed widget.
-    embedContainer.appendChild(buildInstagramBlockquote(entry.url));
+    // Instagram cards (and, as a last resort, a TikTok entry that somehow
+    // has no video ID - buildInstagramPlayer degrades to an outbound link
+    // when there's no shortcode to embed).
+    embedContainer.appendChild(buildInstagramPlayer(embedContainer));
   }
 
   // TikTok-style overlay chrome on top of the clip: platform badge up top,
@@ -208,11 +208,8 @@ function renderGrid(entries) {
   }
   feed.appendChild(buildEndCard(entries));
   observeFeed(feed);
-
-  // TikTok clips render as self-contained Embed Player iframes (see
-  // embeds.js) - no loader script needed. One process() call still picks up
-  // every Instagram blockquote in the feed.
-  processInstagramEmbeds();
+  // Both platforms now render as self-contained iframes built in
+  // embeds.js - no loader scripts, no post-render processing pass.
 }
 
 export function render(room, ctx) {

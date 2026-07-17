@@ -13,14 +13,25 @@
 //   or fetch its thumbnail. Instagram links are therefore format-validated
 //   only (regex + shortcode extraction) and accepted without a liveness
 //   check or thumbnail. This is a real platform constraint, not an
-//   oversight - flagged in output.md.
+//   oversight - flagged in output.md. The failure UX is still fine: a dead
+//   shortcode renders Instagram's own "post may have been removed" card
+//   inside the embed iframe (verified live, Session 10).
+// - Instagram SHARE links (instagram.com/share/...) - what the app's own
+//   share sheet copies - are a redirect that only instagram.com itself can
+//   resolve: no CORS on the redirect, and the /share/ page refuses to be
+//   iframed (verified live, Session 10). They can't be embedded or
+//   resolved client-side, so they're rejected with instructions to grab
+//   the real URL instead of a generic "not recognized" error.
 
 const TIKTOK_VIDEO_RE = /^https?:\/\/(?:www\.)?tiktok\.com\/@[\w.\-]+\/video\/(\d+)\/?(?:\?.*)?$/i;
 const TIKTOK_SHORT_RE = /^https?:\/\/(?:vm|vt|m)\.tiktok\.com\/[\w\-]+\/?(?:\?.*)?$/i;
 const TIKTOK_T_RE = /^https?:\/\/(?:www\.)?tiktok\.com\/t\/[\w\-]+\/?(?:\?.*)?$/i;
 
-const INSTAGRAM_RE = /^https?:\/\/(?:www\.)?instagram\.com\/(?:reel|reels)\/([\w\-]+)\/?(?:\?.*)?$/i;
-const INSTAGRAM_SHORT_RE = /^https?:\/\/instagr\.am\/(?:reel|reels)\/([\w\-]+)\/?(?:\?.*)?$/i;
+// reel/reels = Reels, p = video posts (Reels often circulate as /p/ links);
+// all three embed identically via /p/{shortcode}/embed/ (see embeds.js).
+const INSTAGRAM_RE = /^https?:\/\/(?:www\.|m\.)?instagram\.com\/(?:reel|reels|p)\/([\w\-]+)\/?(?:\?.*)?$/i;
+const INSTAGRAM_SHORT_RE = /^https?:\/\/instagr\.am\/(?:reel|reels|p)\/([\w\-]+)\/?(?:\?.*)?$/i;
+const INSTAGRAM_SHARE_RE = /^https?:\/\/(?:www\.|m\.)?instagram\.com\/share\//i;
 
 export function detectPlatform(rawUrl) {
   const url = (rawUrl || '').trim();
@@ -43,6 +54,13 @@ export async function validateAndResolveLink(rawUrl) {
 
   const platform = detectPlatform(url);
   if (!platform) {
+    if (INSTAGRAM_SHARE_RE.test(url)) {
+      return {
+        ok: false,
+        platform: 'instagram',
+        error: "That's an Instagram share link, which can't be embedded. Open it in your browser, then copy the instagram.com/reel/... address instead.",
+      };
+    }
     return { ok: false, error: 'Not a recognized TikTok or Instagram Reels link.' };
   }
 

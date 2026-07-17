@@ -752,3 +752,84 @@ runs, legacy no-`order` entries fall back deterministically, dedup +
 contributors untouched) plus ESM syntax check on the three edited
 modules. The in-browser compile path is the same mergeSubmissions call
 the previous rounds already exercised live.
+
+---
+
+## Session 10 - Instagram Reels, made actually usable
+
+User asked whether Instagram Reels could be "gotten working." Answer:
+they now work as well as Instagram permits, and the ceiling is finally
+verified evidence, not folklore.
+
+**The ceiling, established empirically this session** (live Chromium
+against real public reels, not assumptions):
+- The embed page (`instagram.com/{p|reel}/{shortcode}/embed/`) registers
+  ZERO usable `message` listeners - instrumented `addEventListener` on the
+  embed window and captured every registration; both are a setImmediate
+  polyfill's self-listener. Instagram's own embed.js protocol is
+  iframe-to-parent only (MEASURE/MOUNTED/UNMOUNTING height reports).
+  There is no play/pause/mute/autoplay command channel. Tap-to-play is
+  physics, not a missing feature.
+- The embed DOES contain a real `<video>` with the reel's CDN source and
+  plays inline on tap, with sound, in one tap (their player has no
+  separate unmute step). So a rendered card is genuinely playable - the
+  weak spot was never playback, it was everything around it.
+- `/p/{shortcode}/embed/` serves reels identically to
+  `/reel/{shortcode}/embed/` (verified pixel-identical render), so one
+  embed URL shape covers reels AND video posts.
+- A dead/private/wrong shortcode renders Instagram's own "The link to
+  this photo or video may be broken, or the post may have been removed"
+  card inside the iframe - a self-explaining failure state.
+- `instagram.com/share/...` links (what Instagram's in-app share sheet
+  copies) are 302 redirects that refuse to be iframed (X-Frame-Options)
+  and can't be resolved client-side (no CORS). They can never be
+  embedded directly.
+
+**What changed:**
+- `embeds.js`: Instagram cards now render OUR OWN iframe pointed straight
+  at `/p/{shortcode}/embed/` - the same URL embed.js would have generated,
+  minus the loader script, the `instgrm.Embeds.process()` re-scan dance,
+  and the SPA timing risk. The iframe is a plain URL we control, so
+  stopping a clip is now the same class of operation as TikTok's
+  reloadPlayer (replace our own iframe), not the fragile
+  blockquote-teardown special case. buildInstagramBlockquote,
+  loadInstagramScript, and processInstagramEmbeds are gone.
+- Reload-storm fix: an Instagram (or fallen-back TikTok) embed cannot
+  autoplay, so a card the user never tapped is guaranteed silent - and is
+  now left alone on snap-away. Previously EVERY instagram card was torn
+  down and re-processed on EVERY snap. Only a card the user actually
+  tapped into (detected via the existing Session-4 window-blur focus
+  trick, now threaded through `activateContainer(container, viaTap)` as
+  `info.tapped`) gets the teardown/rebuild stop - and taps on the
+  already-active card count, which is the normal play gesture.
+- `linkValidation.js`: accepts `instagram.com/p/...` and `m.instagram.com`
+  links (reels circulate heavily as /p/ links), and rejects
+  `instagram.com/share/...` links with a targeted, actionable error
+  ("open it in your browser, copy the instagram.com/reel/... address")
+  instead of the generic "not recognized" - very likely the failure users
+  hit when reels felt broken, since the app's own share sheet is where
+  most pasted links come from.
+- `presenter.js`: builds the new iframe directly; no post-render
+  processing pass; degenerate no-shortcode entries degrade to an
+  outbound link with the right platform label.
+- `css/style.css`: dropped the now-dead `.instagram-media` overrides.
+
+**Still impossible (unchanged, same platform constraints):** autoplay,
+programmatic pause/mute, liveness pre-verification, thumbnails for the
+reveal (Meta Graph API token + app review would be required for oEmbed).
+
+**QA - full live round, 13/13 checks:** two headless-Chromium players
+against live Firebase; host created room KEWC/C2N7 (two runs), guest
+joined, submitted a real public reel as /reel/, a second real reel as
+/p/, a share link (rejected with the targeted message), and a TikTok
+(oEmbed-verified); host compiled; feed showed 3 clips + end card in
+shuffled order; both instagram cards rendered direct `/p/.../embed/`
+iframes with visible posters (screenshot-verified); guest view loaded
+zero platform iframes; snap-to-and-away WITHOUT tapping left the
+instagram iframe node untouched (no rebuild); a real click into the
+iframe followed by snap-away tore it down and rebuilt it (the genuine
+focus-blur path fired in the test browser, `bringToFront` required
+headless). Sandbox caveat: this container's Chromium lacks H.264, so
+actual video playback shows a black frame here - the embed's poster,
+chrome, and play control all rendered, and playback-on-tap is the
+platform's own behavior verified in Session 3's real-browser testing.

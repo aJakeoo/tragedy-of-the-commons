@@ -266,7 +266,7 @@ label {
   overflow: hidden;
 }
 .presenter-embed {
-  position: relative; /* Instagram's embed.js positions its iframe absolutely - contain it here, not the card */
+  position: relative; /* the TikTok sound gamble overlays a hidden absolute iframe - contain it here, not the card */
   height: 100%;
   width: 100%;
   max-width: 560px;
@@ -278,14 +278,6 @@ label {
 }
 .presenter-embed::-webkit-scrollbar { display: none; }
 .presenter-embed iframe { width: 100%; height: 100%; border: none; }
-.presenter-embed blockquote.instagram-media,
-.presenter-embed iframe.instagram-media {
-  max-width: 100% !important;
-  min-width: 0 !important;
-  width: 100% !important;
-  max-height: 100%;
-  overflow-y: auto;
-}
 /* Overlay chrome - pointer-events off so taps/scrolls reach the clip. */
 .feed-badge {
   position: absolute;
