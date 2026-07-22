@@ -912,5 +912,5 @@ remains the only environment that has ever settled this either way.
   This log (`output.md`) is append-only and stays as "Comments" in every
   entry before this one, since it's a historical record, not live text.
 
-**Commit:** pending, see git log for the hash pushed alongside this
-entry.
+**Commit:** `3965a8b` - "Add guess-the-submitter detective mini-game,
+colorful bezel accents, QR join, rename to Commons".
