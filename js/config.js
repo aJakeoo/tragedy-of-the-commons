@@ -1,7 +1,7 @@
 // ── Game identity ────────────────────────────────────────────────────────────
 // Working title only. Keep every user-facing string sourced from here so a
 // rename ("Tragedy of the Commons") never requires touching game logic.
-export const GAME_NAME = 'Tragedy of the Comments';
+export const GAME_NAME = 'Tragedy of the Commons';
 export const GAME_TAGLINE = 'A party game of terrible taste and shared blame.';
 
 // ── Tunables ─────────────────────────────────────────────────────────────────

@@ -176,6 +176,23 @@ export async function setRevealAttribution(code, round, revealed) {
   await withTimeout(updateDoc(roomRef(code), { [`rounds.${round}.revealAttribution`]: revealed }));
 }
 
+// Whichever clip the host's feed is currently snapped to - guests' devices
+// react to this via their normal subscribeToRoom listener to drive the
+// guess-the-submitter prompt (see js/guessing.js). null on the end card /
+// before the feed has snapped anywhere yet.
+export async function setActiveEntry(code, round, entryId) {
+  await withTimeout(updateDoc(roomRef(code), { [`rounds.${round}.activeEntryId`]: entryId ?? null }));
+}
+
+// One field per (entry, guesser) - freely overwritable while that entry
+// stays active. Locking is structural (see js/guessing.js): once the feed
+// moves on, the UI that would let a player change this guess is gone.
+export async function submitGuess(code, round, entryId, guesserPlayerId, guessedPlayerId) {
+  await withTimeout(updateDoc(roomRef(code), {
+    [`rounds.${round}.guesses.${entryId}.${guesserPlayerId}`]: guessedPlayerId,
+  }));
+}
+
 export async function startVoting(code) {
   await withTimeout(updateDoc(roomRef(code), { status: 'voting' }));
 }

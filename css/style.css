@@ -51,6 +51,38 @@ body {
   line-height: 1.5;
 }
 
+/* The two little mascot blobs from the Claude Design mockup's title
+   moment - one happy (terracotta), one grumpy (dark green), a nod to
+   "terrible taste and shared blame." Purely decorative (aria-hidden). */
+.mascot-pair {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 0.75rem;
+}
+.mascot {
+  position: relative;
+  width: 26px;
+  height: 30px;
+  border-radius: 50% 50% 40% 40% / 60% 60% 40% 40%;
+}
+.mascot::before, .mascot::after {
+  content: '';
+  position: absolute;
+  top: 9px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-surface);
+}
+.mascot::before { left: 5px; }
+.mascot::after { right: 5px; }
+.mascot-happy { background: var(--color-accent); }
+.mascot-grumpy { background: var(--color-secondary); }
+.mascot-mouth { position: absolute; left: 8px; width: 10px; height: 5px; }
+.mascot-happy .mascot-mouth { bottom: 6px; border-bottom: 2px solid var(--color-surface); border-radius: 0 0 8px 8px; }
+.mascot-grumpy .mascot-mouth { bottom: 5px; border-top: 2px solid var(--color-surface); border-radius: 8px 8px 0 0; }
+
 h1, h2, h3 {
   font-family: var(--font-display);
   font-weight: 600;
@@ -116,6 +148,28 @@ label {
   background: var(--color-card);
 }
 
+/* Little colorful accent bar along the top edge of every bordered "bezel"
+   component, pulled from the Claude Design source's palette. Default is a
+   terracotta-gold-green sweep across the app's three core hues;
+   --bezel-accent lets specific components substitute their own gradient for
+   a bit of color variety (see .reveal-entry / .detective-entry below, which
+   use it to give the two independent scoreboards distinct identities). */
+.card, .link-slot, .ballot-entry, .player-list li, .room-code,
+.reveal-entry, .detective-entry {
+  position: relative;
+  overflow: hidden;
+}
+.card::before, .link-slot::before, .ballot-entry::before, .player-list li::before,
+.room-code::before, .reveal-entry::before, .detective-entry::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--bezel-accent, linear-gradient(90deg, var(--color-accent), var(--color-gold), var(--color-secondary)));
+}
+
 .row { display: flex; gap: 0.5rem; align-items: center; }
 .row.between { justify-content: space-between; }
 .stack { display: flex; flex-direction: column; gap: 0.5rem; }
@@ -162,6 +216,16 @@ label {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
 }
+
+.qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+.qr-wrap img {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  padding: 8px;
+  display: block;
+}
+.qr-caption { margin: 0; }
 
 .player-list { list-style: none; padding: 0; }
 .player-list li {
@@ -371,10 +435,57 @@ label {
 }
 
 /* Guest view during the compiled feed - the host casts the clips to the
-   shared screen; guests just get pointed at it. */
+   shared screen; guests just get pointed at it, and (once a clip goes
+   active) prompted to guess who submitted it. */
 .guest-compiling {
   text-align: center;
   padding: 4rem 1.5rem;
+}
+.guess-panel { max-width: 480px; margin: 0 auto; }
+.guess-prompt {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  margin-bottom: 1.1rem;
+}
+.guess-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+}
+.guess-option {
+  position: relative;
+  min-height: 44px;
+  padding: 0.55rem 1.4rem 0.55rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.guess-option::after {
+  content: '';
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-secondary);
+  opacity: 0.55;
+}
+.guess-option:hover { border-color: var(--color-accent); }
+.guess-option.selected {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-surface);
+}
+.guess-option.selected::after { background: var(--color-surface); opacity: 0.9; }
+.guess-own-note {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: var(--color-accent-dark);
 }
 
 /* Post-submit ballot celebration */
@@ -442,6 +553,7 @@ label {
 /* Reveal */
 .reveal-list { list-style: none; padding: 0; }
 .reveal-entry {
+  --bezel-accent: linear-gradient(90deg, var(--color-accent), var(--color-gold));
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: 0.9rem 1.1rem;
@@ -547,6 +659,54 @@ label {
 .champion-banner.visible { opacity: 1; }
 .champion-banner .label { color: var(--color-text-muted); font-size: 0.85rem; }
 .champion-banner .handle { font-family: var(--font-display); color: var(--color-gold-text); font-size: 1rem; }
+
+/* Best Detective - the guess-the-submitter mini-game's own reveal, a
+   separate section from the funniest-clip podium above (not merged). */
+.detective-stage { margin-top: 1.5rem; }
+.detective-heading {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  text-align: center;
+  margin: 0 0 0.9rem;
+}
+.detective-list { list-style: none; padding: 0; }
+.detective-entry {
+  --bezel-accent: linear-gradient(90deg, var(--color-secondary), var(--color-gold-soft));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 0.7rem 1.1rem;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  background: var(--color-card);
+  opacity: 0;
+  transform: translateY(12px);
+  animation: revealIn 0.5s ease forwards;
+}
+.detective-entry .rank {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.95rem;
+  width: 3rem;
+  text-align: center;
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+.detective-name { flex: 1; }
+.detective-count {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--color-text);
+  flex-shrink: 0;
+}
+.detective-entry.winner {
+  border-color: var(--color-gold);
+  background: linear-gradient(135deg, var(--color-gold-bg-1), var(--color-gold-bg-2));
+  box-shadow: 0 0 0 1px var(--color-gold);
+}
+.detective-entry.winner .rank, .detective-entry.winner .detective-count { color: var(--color-gold-text); }
 
 .tally-count {
   font-family: var(--font-display);

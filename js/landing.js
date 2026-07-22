@@ -5,6 +5,17 @@ document.title = GAME_NAME;
 document.getElementById('game-title').textContent = GAME_NAME;
 document.getElementById('game-tagline').textContent = GAME_TAGLINE;
 
+// Arriving via the lobby's join QR code (?code=XXXX) - pre-fill the room
+// code and drop focus straight into the name field so scanning is the only
+// typing-free step; the player still has to type their name.
+const prefillCode = new URLSearchParams(location.search).get('code');
+if (prefillCode) {
+  const joinCodeInput = document.getElementById('join-code');
+  joinCodeInput.value = prefillCode.toUpperCase();
+  joinCodeInput.closest('.card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('join-name').focus();
+}
+
 function showError(elId, message) {
   const el = document.getElementById(elId);
   el.textContent = message;

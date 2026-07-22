@@ -1,4 +1,4 @@
-import { setRevealAttribution, startVoting } from './firebase.js';
+import { setRevealAttribution, startVoting, setActiveEntry } from './firebase.js';
 import { sortEntries } from './scoring.js';
 import { showPhaseError } from './uiError.js';
 import {
@@ -19,6 +19,7 @@ let presenterRound = null;
 let renderedEntryIds = null; // sorted, joined - identifies the current feed's contents
 let feedObserver = null;
 let feedPoller = 0;
+let currentCode = null; // set on the host's client only - see the isHost guard in render()
 
 function buildCard(entryId, entry) {
   const card = document.createElement('div');
@@ -30,6 +31,7 @@ function buildCard(entryId, entry) {
   card.appendChild(embedContainer);
 
   registerEmbedCard(embedContainer, {
+    entryId,
     platform: entry.platform,
     embedHtml: entry.embedHtml,
     url: entry.url,
@@ -231,6 +233,7 @@ export function render(room, ctx) {
   document.getElementById('presenter-feed-wrap').classList.toggle('hidden', !ctx.isHost);
   document.getElementById('guest-compiling-view').classList.toggle('hidden', ctx.isHost);
   if (!ctx.isHost) return;
+  currentCode = ctx.code;
 
   if (presenterRound !== round) {
     presenterRound = round;
@@ -270,6 +273,12 @@ export function render(room, ctx) {
     window.addEventListener('totc-sound-enabled', () => {
       soundBtn.classList.add('hidden');
     });
+    // Syncs "whichever clip the feed is snapped to" to Firestore so guests'
+    // devices can drive the guess-the-submitter prompt (js/guessing.js).
+    window.addEventListener('totc-active-clip-changed', e => {
+      if (!currentCode || presenterRound === null) return;
+      setActiveEntry(currentCode, presenterRound, e.detail.entryId).catch(() => {});
+    });
   }
 
   const entryIdsKey = entries.map(([id]) => id).sort().join(',');
@@ -278,9 +287,15 @@ export function render(room, ctx) {
     renderGrid(entries);
   }
 
+  // Attribution is unconditionally hidden on the feed itself, regardless of
+  // the toggle below: the feed IS the shared screen everyone in the room is
+  // watching, so a name rendering here breaks the guessing mechanic for the
+  // whole room at once. `revealAttribution`/the toggle stay wired up (write
+  // still happens) in case a future, non-feed view wants to read it, but as
+  // of this session nothing else consumes it - see output.md Session 10.
   document.querySelectorAll('#presenter-grid .presenter-card').forEach(card => {
     const entry = submissions[card.dataset.entryId];
-    if (entry) renderContributors(card, entry, revealAttribution);
+    if (entry) renderContributors(card, entry, false);
   });
 
   document.getElementById('host-presenter-controls').classList.remove('hidden');

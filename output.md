@@ -752,3 +752,165 @@ runs, legacy no-`order` entries fall back deterministically, dedup +
 contributors untouched) plus ESM syntax check on the three edited
 modules. The in-browser compile path is the same mergeSubmissions call
 the previous rounds already exercised live.
+
+## Session 9 addendum 2 - em dash and emoji cleanup
+
+User asked for every em dash removed from the repo and for the TV emoji
+removed from the guest "Eyes on the big screen" view. Ran a two-pass
+automated replace across all source and docs (235 em dashes across 19
+files, comments and this log included) and deleted the
+`.guest-compiling-icon` markup/CSS. Verified via `node --check` on the 14
+touched JS files and a final grep for zero remaining em dashes.
+
+---
+
+## Session 10 - Guess-the-submitter detective mini-game, colorful bezel accents, QR join, rename
+
+**User request:** a second, independent mini-game layered on the existing
+point-ballot system - while the host's feed plays, each guest privately
+guesses who submitted the on-screen clip, scored on its own "detective"
+scoreboard, revealed separately at the end. Explicit constraint: don't
+touch, simplify, or merge into the existing funniest-clip ballot/reveal -
+the user hasn't decided whether to keep that system long-term.
+
+**Data model (additive):** two new fields on `rounds.{round}` -
+`activeEntryId` (whichever clip the host's feed is snapped to, written by
+the host's client) and `guesses.{entryId}.{guesserPlayerId} =
+guessedPlayerId`. No `firestore.rules` change needed (already open on
+everything under `rooms/{code}`).
+
+**Active-clip sync (`js/embeds.js`, `js/presenter.js`).** `embeds.js`
+already tracked "the active container" from two places - the normal
+`activateContainer()` path (IO/scroll/poller-driven), and a second,
+easy-to-miss path where `buildTikTokPlayer()` sets `activeContainer`
+directly for the feed's first clip, bypassing `activateContainer()`
+entirely. Both now dispatch a `totc-active-clip-changed` window event
+carrying the entry id (via a shared `emitActiveClipChanged` helper);
+missing the first-clip path would have meant every round's first clip
+never synced. `presenter.js` listens once and calls a new
+`setActiveEntry(code, round, entryId)` in `firebase.js`. Purely additive -
+no existing playback/sound-gamble logic touched.
+
+**Attribution forced hidden on the feed, unconditionally
+(`js/presenter.js`).** The one hard requirement: since the compiled feed
+*is* the shared screen the whole room watches (Session 8), a submitter's
+name rendering there breaks the guessing mechanic for everyone at once the
+moment it happens. The feed's contributor-rendering call site now always
+passes `false` regardless of the `attribution-toggle` checkbox's state.
+The toggle and its write stay in the DOM/code (not removed - nothing else
+consumes it right now, but removing UI wasn't asked for). Verified live:
+manually checked the toggle ON and confirmed every card still rendered
+"Submitted by: hidden".
+
+**Guest guess UI (new `js/guessing.js`, wired into `game.js`'s
+`'compiling'` case).** Host-only exclusion mirrors the host-only feed
+(guests guess, the host is busy watching the shared screen). For
+whichever entry `activeEntryId` points to: a contributor sees "This one's
+yours!" with no options (defensively double-guarded in the scoring
+function too); everyone else sees a single-select pill per room player
+(host included), one tap both selects and fires `submitGuess`, no
+confirmation step. Locking is structural, not a written flag or security
+rule: once `activeEntryId` moves on, the panel rebuilds for the new entry
+and there's no UI path left back to the old one, so whatever was last
+written simply stands.
+
+**Merged-entry correctness (`js/scoring.js`).** New
+`tallyDetectiveScores(submissions, guesses, players)`, same shape as the
+existing `tallyResults`: for each guess, checks the guessed id against a
+`Set` of the entry's contributor ids, so a merged/duplicate entry counts
+as correct against *any* contributor with no special-casing. A guesser's
+own clips are skipped even though the UI never offers that guess (a
+second, defensive guard). Returns a competition-ranked list including
+every current player, even zero-correct ones.
+
+**Best Detective reveal (`js/reveal.js`, `game.html`).** A second,
+visually separate section on the same existing reveal screen - not a new
+phase, not a merge into the top-3 podium - populated right after the
+funniest-clip tally animation settles. Shows every player's correct-guess
+count (not just a top 3), gold winner treatment only when someone
+actually has a correct guess (an all-zero round doesn't crown a hollow
+winner). Computed independent of `ballots`/the point system entirely, so
+it'll keep working if that system is ever removed later.
+
+**QA (live, 3-tab browser automation - host + 2 guests, real Firestore,
+not the emulator):** built a round directly through `firebase.js`/
+`scoring.js`'s exported functions (bypassing the lobby UI, same technique
+as Session 2's investigation) with 3 entries including one genuine merge
+(two players submitting the same TikTok link), to get straight to the
+interesting states without burning through the submission flow by hand.
+Confirmed live: the first-clip sync bypass path fires correctly (this was
+the trap called out above); a contributor sees "yours" with options
+hidden; a non-contributor sees all 3 players including the host; a tap
+selects and writes immediately, verified against the raw Firestore
+document; the merged entry correctly shows "yours" to both its
+contributors; attribution stayed hidden on the feed with the toggle
+manually forced on; the Best Detective podium tallied exactly right
+against a hand-checked set of guesses (one correct, one incorrect) and
+rendered as a genuinely separate section from the (untouched, working)
+funniest podium.
+
+**QA caveat - could not fully verify automatic scroll-driven sync
+in-harness:** the automated multi-tab session reported `document.hidden:
+true` on every tab, including freshly-created ones - this specific
+browser-automation setup never gives a tab real foreground/visible
+status. Chrome pauses IntersectionObserver/rAF-driven work for hidden
+tabs, which silently stalled the (unmodified, Session-8-vintage)
+scroll/IO/poller detection trio - not a regression, since a manual call
+to the same `activateContainer()` the detection trio calls produced the
+correct event, correct Firestore write, and correct guest-side reaction
+every time. The detection trio itself was already verified live in
+Session 8 under real interactive conditions; this session only added an
+event dispatch inside it. Real single-tab (or real-device) use doesn't
+hit this - the host's tab showing the feed is definitionally the one the
+host is looking at.
+
+**Auto-unmute - investigated per an explicit mid-session ask, not fixed
+(out of scope, nothing changed here):** live in this same QA session, the
+TikTok Embed Player never fired a single postMessage event - not even
+`onPlayerReady` - despite the iframe document itself loading (HTTP 200);
+the clip area stayed solid black. This is the identical failure signature
+documented in Sessions 8 and 9 (TikTok-side throttling/blocking of this
+dev machine's embed requests), reproduced again today, not something
+client code can route around. Confirmed by code diff review that nothing
+touched this session goes anywhere near the `muted`/watchdog/gamble
+logic - the only change near it is the additive event dispatch above.
+The app's own fallback (watchdog reload to muted) recovered correctly
+rather than getting stuck. Real-device testing on the deployed site
+remains the only environment that has ever settled this either way.
+
+**Also this session, from follow-up requests mid-turn:**
+- **Colorful bezel accents (`css/style.css`).** A little gradient accent
+  bar (terracotta/gold/green) along the top edge of every bordered "card"
+  component site-wide (`.card`, `.link-slot`, `.ballot-entry`,
+  `.player-list li`, `.room-code`, `.reveal-entry`, `.detective-entry`,
+  the new `.qr-wrap`), via a `--bezel-accent` custom property so specific
+  components can substitute their own gradient - `.reveal-entry` uses
+  terracotta/gold, `.detective-entry` uses green/gold, giving the two
+  independent scoreboards distinct color identities. `.guess-option`
+  pills get a small corner accent dot instead (a top bar reads oddly on a
+  pill shape). Pure CSS, no layout/DOM structure changes.
+- **The two mascot blobs (`index.html`, `lobby.html`, `css/style.css`).**
+  Pulled from the original Claude Design mockup's title moment - a happy
+  terracotta blob and a grumpy dark-green blob, side by side above the
+  big title on both the landing page and the lobby page. Decorative only
+  (`aria-hidden`).
+- **QR code to join (`lobby.html`, `js/lobby.js`, `js/landing.js`,
+  `css/style.css`).** The lobby now renders a QR code (via a public QR
+  image API - `api.qrserver.com`, no bundled library, matching this
+  zero-build static site's existing pattern of leaning on hosted
+  endpoints like TikTok's oEmbed instead of vendoring a library) encoding
+  `index.html?code=XXXX`, built from `location.origin` at runtime so it
+  works correctly both in local dev and on the deployed Pages site.
+  `landing.js` reads `?code=` on load, pre-fills and uppercases the join
+  code field, and focuses the name field. Verified live: navigating to
+  the constructed URL correctly pre-filled "QA10" and scrolled to/focused
+  the join form.
+- **Renamed the game from "Tragedy of the Comments" to "Tragedy of the
+  Commons"** (`js/config.js`'s `GAME_NAME`, and the hardcoded `<title>`/
+  footer text on all three HTML pages, plus a `firestore.rules` comment) -
+  matches the GitHub repo's name, which was already `tragedy-of-the-commons`.
+  This log (`output.md`) is append-only and stays as "Comments" in every
+  entry before this one, since it's a historical record, not live text.
+
+**Commit:** pending, see git log for the hash pushed alongside this
+entry.

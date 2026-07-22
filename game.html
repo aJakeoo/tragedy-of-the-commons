@@ -42,10 +42,19 @@
       <button id="feed-sound-btn" class="feed-sound-btn hidden">Tap for sound</button>
     </div>
 
-    <!-- Guests don't get the feed - the host casts it to the shared screen. -->
+    <!-- Guests don't get the feed - the host casts it to the shared screen.
+         Instead they get the guess-the-submitter prompt (js/guessing.js),
+         synced to whichever clip is active via rounds.{round}.activeEntryId. -->
     <div id="guest-compiling-view" class="guest-compiling hidden">
-      <h2>Eyes on the big screen</h2>
-      <p class="muted">The host is playing this round's clips. Voting opens here when the feed's done.</p>
+      <div id="guess-placeholder">
+        <h2>Eyes on the big screen</h2>
+        <p class="muted">The host is playing this round's clips. Voting opens here when the feed's done.</p>
+      </div>
+      <div id="guess-panel" class="guess-panel hidden">
+        <p class="guess-prompt">Who submitted this one?</p>
+        <div id="guess-options" class="guess-options"></div>
+        <p class="guess-own-note hidden" id="guess-own-note">This one's yours!</p>
+      </div>
     </div>
 
     <div id="host-presenter-controls" class="card hidden">
@@ -92,6 +101,14 @@
       <span class="handle" id="champion-handle"></span>
     </div>
 
+    <!-- Best Detective - the guess-the-submitter mini-game's own, separate
+         recognition moment (js/guessing.js, tallyDetectiveScores in
+         scoring.js). Independent of the ballot/reveal above by design. -->
+    <div id="detective-stage" class="detective-stage hidden">
+      <h2 class="detective-heading">Best Detective</h2>
+      <ol class="detective-list" id="detective-list"></ol>
+    </div>
+
     <div id="host-next-round-controls" class="card hidden">
       <button class="primary" id="next-round-btn">Start next round</button>
     </div>
@@ -99,7 +116,7 @@
 
   <p class="error hidden" id="game-error"></p>
 
-  <footer class="build-note">Tragedy of the Comments</footer>
+  <footer class="build-note">Tragedy of the Commons</footer>
 
   <script type="module" src="js/game.js"></script>
 </body>

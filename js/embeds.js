@@ -86,6 +86,19 @@ function markSoundEnabled() {
   window.dispatchEvent(new CustomEvent('totc-sound-enabled'));
 }
 
+// Lets presenter.js sync "whichever clip the feed is snapped to" up to
+// Firestore (see setActiveEntry), which is what drives guests' guess-the-
+// submitter prompt in js/guessing.js. Fired on every real activeContainer
+// change - including the direct assignment in buildTikTokPlayer's `first`
+// branch below, which bypasses activateContainer() entirely and would
+// otherwise leave every round's first clip un-synced.
+function emitActiveClipChanged(container) {
+  const info = container ? cardInfo.get(container) : null;
+  window.dispatchEvent(new CustomEvent('totc-active-clip-changed', {
+    detail: { entryId: info?.entryId ?? null },
+  }));
+}
+
 // Called from a genuine click handler (the feed's sound button). Starting
 // the gamble iframe's load synchronously inside the tap maximizes the
 // chance the browser honors autoplay delegation for it (transient
@@ -289,6 +302,7 @@ function startContainer(container) {
 export function activateContainer(container) {
   if (container === activeContainer || !cardInfo.has(container)) return;
   activeContainer = container;
+  emitActiveClipChanged(container);
   for (const c of cardInfo.keys()) {
     if (c !== container) stopContainer(c);
   }
@@ -300,6 +314,7 @@ export function activateContainer(container) {
 export function deactivateFeed() {
   if (activeContainer === null) return;
   activeContainer = null;
+  emitActiveClipChanged(null);
   for (const c of cardInfo.keys()) stopContainer(c);
 }
 
@@ -465,6 +480,7 @@ function fallBackToTapToPlay(container) {
 export function registerEmbedCard(container, info) {
   ensureFocusListener();
   cardInfo.set(container, {
+    entryId: null,
     ready: false,
     fellBack: false,
     iframe: null,
@@ -519,6 +535,7 @@ export function buildTikTokPlayer(container) {
   ensureTikTokMessageListener();
   if (first) {
     activeContainer = container;
+    emitActiveClipChanged(container);
     armUnmutedWatchdog(container);
   }
   return iframe;

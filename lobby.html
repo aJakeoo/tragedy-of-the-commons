@@ -9,10 +9,19 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <div class="mascot-pair" aria-hidden="true">
+    <div class="mascot mascot-happy"><span class="mascot-mouth"></span></div>
+    <div class="mascot mascot-grumpy"><span class="mascot-mouth"></span></div>
+  </div>
   <h1 id="game-title">Lobby</h1>
 
   <div class="room-code" id="room-code">----</div>
   <p class="muted" style="text-align:center">Share this code with everyone playing.</p>
+
+  <div class="card qr-wrap">
+    <img id="join-qr" alt="QR code to join this room" width="160" height="160">
+    <p class="muted qr-caption">Or scan to join</p>
+  </div>
 
   <div class="card">
     <h2>Players</h2>
@@ -30,7 +39,7 @@
 
   <p class="error hidden" id="lobby-error"></p>
 
-  <footer class="build-note">Tragedy of the Comments</footer>
+  <footer class="build-note">Tragedy of the Commons</footer>
 
   <script type="module" src="js/lobby.js"></script>
 </body>

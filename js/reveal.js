@@ -1,4 +1,4 @@
-import { tallyResults } from './scoring.js';
+import { tallyResults, tallyDetectiveScores } from './scoring.js';
 import { startNewRound } from './firebase.js';
 import { showPhaseError } from './uiError.js';
 import { ordinal } from './format.js';
@@ -164,6 +164,40 @@ function renderLeaderboard(results, players) {
   return maxSettleMs;
 }
 
+// The guess-the-submitter mini-game's own reveal - a separate scoreboard
+// from the weighted point ballot above, deliberately not merged into
+// renderLeaderboard. Shows every current player's correct-guess count (not
+// just a top-3, per the brief), with a gold "winner" treatment only when
+// someone actually has correct guesses - an all-zero round (mechanic
+// unused, or no clips shown) shouldn't crown a hollow winner.
+function renderDetectivePodium(results) {
+  const list = document.getElementById('detective-list');
+  list.innerHTML = '';
+
+  results.forEach((r, i) => {
+    const li = document.createElement('li');
+    li.className = 'detective-entry' + (r.rank === 1 && r.correctCount > 0 ? ' winner' : '');
+    li.style.animationDelay = `${i * 0.12}s`;
+
+    const rank = document.createElement('span');
+    rank.className = 'rank';
+    rank.textContent = ordinal(r.rank);
+
+    const name = document.createElement('span');
+    name.className = 'detective-name';
+    name.textContent = r.name;
+
+    const count = document.createElement('span');
+    count.className = 'detective-count';
+    count.textContent = `${r.correctCount} correct`;
+
+    li.append(rank, name, count);
+    list.appendChild(li);
+  });
+
+  document.getElementById('detective-stage').classList.remove('hidden');
+}
+
 export function render(room, ctx) {
   const round = room.round;
   const roundData = room.rounds?.[round] || {};
@@ -197,8 +231,14 @@ export function render(room, ctx) {
 
   cachedResults = tallyResults(submissions, ballots);
   const totalRawPoints = cachedResults.reduce((sum, r) => sum + r.rawPoints, 0);
+  // Independent scoreboard - computed unconditionally, no dependency on
+  // ballots/cachedResults, so this works identically even if the weighted
+  // ballot system above is ever removed.
+  const detectiveResults = tallyDetectiveScores(submissions, roundData.guesses || {}, players);
 
   document.getElementById('reveal-list').innerHTML = '';
+  document.getElementById('detective-stage').classList.add('hidden');
+  document.getElementById('detective-list').innerHTML = '';
   nextBtn.disabled = true;
   const banner = document.getElementById('champion-banner');
   banner.classList.remove('visible');
@@ -214,6 +254,7 @@ export function render(room, ctx) {
           `${winner.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels'} - ${winner.title || winner.url}`;
         banner.classList.add('visible');
       }
+      renderDetectivePodium(detectiveResults);
     }, settleMs));
   });
 }

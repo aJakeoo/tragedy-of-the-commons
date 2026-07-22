@@ -14,6 +14,16 @@ if (!code || !playerId) {
 
 document.getElementById('room-code').textContent = code;
 
+// A phone camera pointed at this jumps straight to the join form with the
+// code pre-filled (see landing.js's ?code= handling) - no manual typing.
+// Rendered via a public QR image API rather than a bundled library: this is
+// a zero-build static site (no npm/bundler, see output.md), so leaning on a
+// hosted endpoint for something like this matches the existing pattern of
+// using TikTok's oEmbed instead of vendoring a video-embed library.
+const joinUrl = `${location.origin}${location.pathname.replace(/lobby\.html$/, 'index.html')}?code=${encodeURIComponent(code)}`;
+document.getElementById('join-qr').src =
+  `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=10&data=${encodeURIComponent(joinUrl)}`;
+
 armDisconnectCleanup(code, playerId);
 
 let unsubscribe = null;

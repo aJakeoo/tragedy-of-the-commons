@@ -71,6 +71,54 @@ export function multiplierFor(entry) {
   return entry.contributors.length * MERGE_VOTE_MULTIPLIER_PER_CONTRIBUTOR;
 }
 
+// Tallies the guess-the-submitter mini-game, entirely independent of the
+// weighted point ballot above (separate scoreboard, per the brief). A guess
+// matching ANY contributor of a merged/duplicate entry counts as correct -
+// no need to guess every contributor. A guesser's own clips are skipped
+// (never counted toward or against them) even though the UI never offers
+// that guess in the first place - this is a defensive second guard.
+//
+// submissions: { [entryId]: { ...entry, contributors: [{id, name}] } }
+// guesses: { [entryId]: { [guesserPlayerId]: guessedPlayerId } }
+// players: { [playerId]: { name, ... } }
+// returns rank-sorted (competition ranking, same scheme as tallyResults):
+// [{ playerId, name, correctCount, rank }] - includes every current player,
+// even those with zero correct guesses.
+export function tallyDetectiveScores(submissions, guesses, players) {
+  const counts = {};
+  for (const pid of Object.keys(players || {})) counts[pid] = 0;
+
+  for (const [entryId, entryGuesses] of Object.entries(guesses || {})) {
+    const entry = submissions[entryId];
+    if (!entry) continue;
+    const contributorIds = new Set((entry.contributors || []).map(c => c.id));
+    for (const [guesserId, guessedPlayerId] of Object.entries(entryGuesses || {})) {
+      if (contributorIds.has(guesserId)) continue; // own clip - never scored
+      if (!(guesserId in counts)) counts[guesserId] = 0;
+      if (contributorIds.has(guessedPlayerId)) counts[guesserId]++;
+    }
+  }
+
+  const results = Object.entries(counts).map(([playerId, correctCount]) => ({
+    playerId,
+    correctCount,
+    name: players?.[playerId]?.name || 'Someone',
+  }));
+
+  results.sort((a, b) => b.correctCount - a.correctCount);
+  let rank = 0;
+  let lastScore = null;
+  results.forEach((r, i) => {
+    if (r.correctCount !== lastScore) {
+      rank = i + 1;
+      lastScore = r.correctCount;
+    }
+    r.rank = rank;
+  });
+
+  return results;
+}
+
 // Tallies weighted totals and produces a rank-sorted list (competition
 // ranking: ties share a rank, next rank skips accordingly). Also returns,
 // per entry, which voters contributed how many raw points - the reveal
