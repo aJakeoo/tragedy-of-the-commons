@@ -229,19 +229,25 @@ export function render(room, ctx) {
   pendingTimers.forEach(clearTimeout);
   pendingTimers.length = 0;
 
-  cachedResults = tallyResults(submissions, ballots);
-  const totalRawPoints = cachedResults.reduce((sum, r) => sum + r.rawPoints, 0);
-  // Independent scoreboard - computed unconditionally, no dependency on
-  // ballots/cachedResults, so this works identically even if the weighted
-  // ballot system above is ever removed.
-  const detectiveResults = tallyDetectiveScores(submissions, roundData.guesses || {}, players);
-
   document.getElementById('reveal-list').innerHTML = '';
+  document.getElementById('tally-stage').innerHTML = '';
   document.getElementById('detective-stage').classList.add('hidden');
   document.getElementById('detective-list').innerHTML = '';
   nextBtn.disabled = true;
   const banner = document.getElementById('champion-banner');
   banner.classList.remove('visible');
+
+  // Guess-mode rooms never collect a ballot - go straight to the
+  // guess-the-submitter podium instead of the weighted-point leaderboard.
+  if (ctx.mode === 'guess') {
+    const detectiveResults = tallyDetectiveScores(submissions, roundData.guesses || {}, players);
+    renderDetectivePodium(detectiveResults);
+    nextBtn.disabled = false;
+    return;
+  }
+
+  cachedResults = tallyResults(submissions, ballots);
+  const totalRawPoints = cachedResults.reduce((sum, r) => sum + r.rawPoints, 0);
 
   runTallyCountUp(totalRawPoints, () => {
     document.getElementById('tally-stage').innerHTML = '';
@@ -254,7 +260,6 @@ export function render(room, ctx) {
           `${winner.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels'} - ${winner.title || winner.url}`;
         banner.classList.add('visible');
       }
-      renderDetectivePodium(detectiveResults);
     }, settleMs));
   });
 }

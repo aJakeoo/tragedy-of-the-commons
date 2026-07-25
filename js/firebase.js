@@ -17,6 +17,7 @@ import {
   MERGE_VOTE_MULTIPLIER_PER_CONTRIBUTOR,
   PERSIST_SCORES_ACROSS_ROUNDS,
   FIRESTORE_WRITE_TIMEOUT_MS,
+  DEFAULT_PLAY_MODE,
 } from './config.js';
 
 // Firestore calls have been observed to intermittently hang with no thrown
@@ -89,6 +90,7 @@ export async function createRoom(code, hostPlayer) {
       votePointBudget: VOTE_POINT_BUDGET,
       mergeMultiplierPerContributor: MERGE_VOTE_MULTIPLIER_PER_CONTRIBUTOR,
       persistScores: PERSIST_SCORES_ACROSS_ROUNDS,
+      mode: DEFAULT_PLAY_MODE,
     },
     players: {
       [hostPlayer.id]: {
@@ -115,6 +117,15 @@ export async function joinRoom(code, player) {
       ...(PERSIST_SCORES_ACROSS_ROUNDS ? { totalScore: 0 } : {}),
     },
   }));
+}
+
+// Host-only, lobby-only: picks which mini-game the room plays this game
+// (see js/config.js's PLAY_MODE_* / lobby.js). Freely overwritable while
+// still in the lobby - the choice only actually takes effect once startRound
+// fires for round 1, same "last write before start wins" pattern as
+// setRevealAttribution.
+export async function setPlayMode(code, mode) {
+  await withTimeout(updateDoc(roomRef(code), { 'config.mode': mode }));
 }
 
 // Firestore has no server-side "on disconnect" primitive like Realtime

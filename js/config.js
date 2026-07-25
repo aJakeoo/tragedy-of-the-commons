@@ -4,6 +4,14 @@
 export const GAME_NAME = 'Tragedy of the Commons';
 export const GAME_TAGLINE = 'A party game of terrible taste and shared blame.';
 
+// ── Play modes ───────────────────────────────────────────────────────────────
+// Chosen once by the host in the lobby (see lobby.js), before the room's
+// first round starts. Fixed for the whole room after that - nothing writes
+// config.mode again once the game is underway.
+export const PLAY_MODE_FUNNIEST = 'funniest'; // weighted-point ballot on which clip is funniest
+export const PLAY_MODE_GUESS = 'guess'; // guess-the-submitter mini-game, no ballot
+export const DEFAULT_PLAY_MODE = PLAY_MODE_FUNNIEST;
+
 // ── Tunables ─────────────────────────────────────────────────────────────────
 export const MAX_LINKS_PER_PLAYER = 3;
 export const SUBMISSION_TIMER_SECONDS = 60; // soft nudge only - never locks submission or auto-submits

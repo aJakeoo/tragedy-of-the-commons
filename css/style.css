@@ -482,6 +482,28 @@ label {
   color: var(--color-surface);
 }
 .guess-option.selected::after { background: var(--color-surface); opacity: 0.9; }
+.mode-options { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.5rem; }
+.mode-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  text-align: left;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text);
+  font-family: inherit;
+}
+.mode-option strong { font-family: var(--font-display); font-size: 1rem; }
+.mode-option:hover { border-color: var(--color-accent); }
+.mode-option.selected {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-surface);
+}
+.mode-option.selected .muted { color: var(--color-surface); opacity: 0.85; }
+
 .guess-own-note {
   font-family: var(--font-display);
   font-size: 1.1rem;

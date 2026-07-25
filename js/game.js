@@ -1,5 +1,5 @@
 import { subscribeToRoom } from './firebase.js';
-import { GAME_NAME } from './config.js';
+import { GAME_NAME, DEFAULT_PLAY_MODE } from './config.js';
 import { toRoman } from './format.js';
 import * as submission from './submission.js';
 import * as presenter from './presenter.js';
@@ -75,6 +75,7 @@ subscribeToRoom(code, room => {
     playerId,
     playerName,
     isHost: room.players?.[playerId]?.isHost === true,
+    mode: room.config?.mode || DEFAULT_PLAY_MODE,
   };
 
   showPhase(room.status);

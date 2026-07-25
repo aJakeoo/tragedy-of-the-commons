@@ -17,6 +17,7 @@ let renderedKey = null; // `${round}:${activeEntryId}` - rebuild options only wh
 
 export function render(room, ctx) {
   const placeholder = document.getElementById('guess-placeholder');
+  const placeholderNote = document.getElementById('guess-placeholder-note');
   const panel = document.getElementById('guess-panel');
   const optionsWrap = document.getElementById('guess-options');
   const ownNote = document.getElementById('guess-own-note');
@@ -27,6 +28,17 @@ export function render(room, ctx) {
     panel.classList.add('hidden');
     return;
   }
+
+  if (ctx.mode !== 'guess') {
+    // Vote-funniest rooms never run this mini-game - guests just watch the
+    // shared feed play out with no prompt of their own.
+    placeholderNote.textContent = "The host is playing this round's clips. Voting opens when the feed's done.";
+    placeholder.classList.remove('hidden');
+    panel.classList.add('hidden');
+    renderedKey = null;
+    return;
+  }
+  placeholderNote.textContent = "The host is playing this round's clips. Guessing opens here when the feed's done.";
 
   const round = room.round;
   const roundData = room.rounds?.[round] || {};

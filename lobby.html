@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lobby</title>
+<title>Lobby - Tragedy of the Commons</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
@@ -28,6 +28,20 @@
     <ul class="player-list" id="player-list"></ul>
   </div>
 
+  <div id="mode-controls" class="card hidden">
+    <h2>Play mode</h2>
+    <div class="mode-options">
+      <button type="button" class="mode-option" id="mode-funniest" data-mode="funniest">
+        <strong>Vote funniest</strong>
+        <span class="muted">Everyone rates the clips with points - most points wins.</span>
+      </button>
+      <button type="button" class="mode-option" id="mode-guess" data-mode="guess">
+        <strong>Guess who submitted</strong>
+        <span class="muted">Everyone guesses who posted each clip - most correct guesses wins.</span>
+      </button>
+    </div>
+  </div>
+
   <div id="host-controls" class="card hidden">
     <button class="primary" id="start-btn">Start game</button>
     <p class="muted" id="start-hint"></p>
@@ -35,6 +49,7 @@
 
   <div id="guest-controls" class="card hidden">
     <p class="muted">Waiting for the host to start the game&hellip;</p>
+    <p class="muted" id="guest-mode-label"></p>
   </div>
 
   <p class="error hidden" id="lobby-error"></p>

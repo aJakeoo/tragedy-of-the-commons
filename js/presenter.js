@@ -1,4 +1,4 @@
-import { setRevealAttribution, startVoting, setActiveEntry } from './firebase.js';
+import { setRevealAttribution, startVoting, revealResults, setActiveEntry } from './firebase.js';
 import { sortEntries } from './scoring.js';
 import { showPhaseError } from './uiError.js';
 import {
@@ -235,12 +235,16 @@ export function render(room, ctx) {
   if (!ctx.isHost) return;
   currentCode = ctx.code;
 
+  // Guess mode has no ballot phase - the feed's end card goes straight to
+  // reveal instead of collecting votes first.
+  const startBtnLabel = ctx.mode === 'guess' ? 'Reveal results' : 'Start voting';
+
   if (presenterRound !== round) {
     presenterRound = round;
     startingVoting = false;
     const startBtn = document.getElementById('start-voting-btn');
     startBtn.disabled = entries.length === 0;
-    startBtn.textContent = 'Start voting';
+    startBtn.textContent = startBtnLabel;
   }
 
   if (!bound) {
@@ -250,16 +254,19 @@ export function render(room, ctx) {
       setRevealAttribution(ctx.code, r.round, e.target.checked);
     });
     document.getElementById('start-voting-btn').addEventListener('click', async e => {
+      const r = window.__totcCurrentRoom;
+      const mode = r?.config?.mode;
+      const label = mode === 'guess' ? 'Reveal results' : 'Start voting';
       startingVoting = true;
       const btn = e.currentTarget;
       btn.disabled = true;
-      btn.textContent = 'Starting voting...';
+      btn.textContent = mode === 'guess' ? 'Revealing...' : 'Starting voting...';
       try {
-        await startVoting(ctx.code);
+        await (mode === 'guess' ? revealResults(ctx.code) : startVoting(ctx.code));
       } catch (err) {
         startingVoting = false;
         btn.disabled = false;
-        btn.textContent = 'Start voting';
+        btn.textContent = label;
         showPhaseError(err);
       }
     });

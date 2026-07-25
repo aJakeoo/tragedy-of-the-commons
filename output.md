@@ -914,3 +914,71 @@ remains the only environment that has ever settled this either way.
 
 **Commit:** `3965a8b` - "Add guess-the-submitter detective mini-game,
 colorful bezel accents, QR join, rename to Commons".
+
+## Session 11 - Host-selectable play mode (vote funniest vs guess who submitted)
+
+Until this session the two mechanics from Session 10 (weighted-point
+ballot, and the guess-the-submitter mini-game) always ran together every
+round - guests guessed submitters during the compiling feed AND voted
+funniest afterward, with reveal showing both scoreboards. The ask was to
+turn that into a host-selectable choice: one mode or the other per room,
+not both.
+
+**Play mode is now chosen once, in the lobby, before the host starts the
+game** - not per round. It's stored as `config.mode` on the room document
+(`funniest` or `guess`, see `js/config.js`'s new `PLAY_MODE_FUNNIEST` /
+`PLAY_MODE_GUESS` / `DEFAULT_PLAY_MODE`), defaulted at `createRoom` and
+freely overwritable pre-game via the new `setPlayMode()` (`js/firebase.js`).
+Once round 1 starts nothing writes `config.mode` again, so it's fixed for
+the room's whole game - `startNewRound`'s partial `updateDoc` never
+touches that field, so it survives every subsequent round automatically.
+
+**Lobby UI (`lobby.html`, `js/lobby.js`).** A new "Play mode" card, host-
+only, with two tappable options (`.mode-option` in `css/style.css`,
+styled like a card-button rather than the pill shape used for
+`.guess-option` since these need a title + description line). Clicking
+one writes optimistically (same low-stakes "update the class immediately,
+fire-and-forget the write, let the next snapshot reconcile" pattern as
+`guessing.js`'s `submitGuess` - failure just means the next snapshot
+corrects it, nothing to error-handle since this is lobby-only and freely
+overwritable). Guests get a read-only "Play mode: X" line instead of the
+picker.
+
+**Downstream branching, all keyed off `ctx.mode` (threaded through
+`game.js`'s per-render `ctx` object, same place `ctx.isHost` already
+lived):**
+- `guessing.js` - guests only get the guess-the-submitter prompt in
+  `guess` mode. In `funniest` mode they get the plain "eyes on the big
+  screen" placeholder for the whole compiling phase (text is now
+  mode-aware too - "Voting opens..." vs "Guessing opens...").
+- `presenter.js` - the feed's end-card button reads `ctx.mode` (read
+  fresh from `window.__totcCurrentRoom` at click time, matching the
+  existing `attribution-toggle` handler's pattern, not trusted from a
+  stale closure) and is "Start voting" → `startVoting()` in funniest
+  mode, or "Reveal results" → `revealResults()` directly in guess mode -
+  guess-mode rooms skip the `voting` status entirely, going straight
+  from `compiling` to `reveal`.
+- `reveal.js` - branches early on `ctx.mode`. `guess` mode tallies and
+  shows only the Best Detective podium (no ballot ever existed to tally).
+  `funniest` mode runs the existing tally-countup/leaderboard/champion-
+  banner flow and no longer also renders the detective podium afterward
+  (previously it always did, even when guessing.js's mechanic never ran
+  for that room - now that's mode-gated instead of "just always show
+  both regardless of relevance").
+
+`voting.js` itself needed no changes - in `guess` mode the room's status
+simply never becomes `'voting'`, so that phase is structurally unreachable
+rather than needing its own mode check.
+
+Verified live via two-tab QA (host + guest, `serve.js` on :8080,
+Instagram Reels URLs for format-only-validated fake submissions since
+they don't need network liveness like TikTok does): created a room,
+switched play mode in the lobby and confirmed the guest's read-only label
+tracked it live, then ran a full round in `guess` mode (submit → compile
+→ guest saw the guess prompt correctly excluding their own clip → host's
+end-card read "Reveal results" → reveal showed only the Best Detective
+podium, champion banner/leaderboard correctly absent) and a full round in
+`funniest` mode in a second room as a regression check (submit → compile
+→ guest saw the plain placeholder, no guess prompt → "Start voting" →
+ballot → reveal showed the weighted leaderboard + champion banner, Best
+Detective podium correctly absent).

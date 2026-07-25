@@ -1,5 +1,10 @@
-import { subscribeToRoom, armDisconnectCleanup, cancelDisconnectCleanup, startRound } from './firebase.js';
-import { GAME_NAME } from './config.js';
+import { subscribeToRoom, armDisconnectCleanup, cancelDisconnectCleanup, startRound, setPlayMode } from './firebase.js';
+import { GAME_NAME, DEFAULT_PLAY_MODE } from './config.js';
+
+const MODE_LABELS = {
+  funniest: 'Vote funniest',
+  guess: 'Guess who submitted',
+};
 
 document.title = `Lobby - ${GAME_NAME}`;
 document.getElementById('game-title').textContent = `Lobby - ${GAME_NAME}`;
@@ -29,6 +34,7 @@ armDisconnectCleanup(code, playerId);
 let unsubscribe = null;
 let navigated = false;
 let starting = false;
+let modeBound = false;
 
 function goToGame() {
   if (navigated) return;
@@ -88,10 +94,30 @@ unsubscribe = subscribeToRoom(code, room => {
     list.appendChild(li);
   }
 
+  const mode = room.config?.mode || DEFAULT_PLAY_MODE;
+
+  document.getElementById('mode-controls').classList.toggle('hidden', !isHost);
   document.getElementById('host-controls').classList.toggle('hidden', !isHost);
   document.getElementById('guest-controls').classList.toggle('hidden', isHost);
 
   if (isHost) {
+    if (!modeBound) {
+      modeBound = true;
+      document.querySelectorAll('.mode-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const chosen = btn.dataset.mode;
+          // Optimistic: reflect the pick immediately rather than waiting on
+          // the round trip, same pattern as guessing.js's submitGuess - low
+          // stakes (lobby-only, freely overwritable) so a failed write just
+          // gets corrected by the next snapshot instead of surfacing an error.
+          document.querySelectorAll('.mode-option').forEach(b => b.classList.toggle('selected', b === btn));
+          setPlayMode(code, chosen).catch(() => {});
+        });
+      });
+    }
+    document.querySelectorAll('.mode-option').forEach(btn => {
+      btn.classList.toggle('selected', btn.dataset.mode === mode);
+    });
     const startBtn = document.getElementById('start-btn');
     if (!starting) {
       startBtn.disabled = playerIds.length < 1;
@@ -131,5 +157,7 @@ unsubscribe = subscribeToRoom(code, room => {
         errEl.classList.remove('hidden');
       }
     };
+  } else {
+    document.getElementById('guest-mode-label').textContent = `Play mode: ${MODE_LABELS[mode] || mode}`;
   }
 });
