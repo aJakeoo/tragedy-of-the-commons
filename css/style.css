@@ -24,6 +24,10 @@
   --color-gold-bg-2: oklch(89% 0.07 85);
   --color-gold-text: oklch(50% 0.13 60);
   --color-error: oklch(55% 0.19 25);
+  --color-success-bg: oklch(94% 0.03 165);
+  --color-success-border: oklch(70% 0.08 165);
+  --color-error-bg: oklch(94% 0.03 30);
+  --color-error-border: oklch(70% 0.13 30);
   --font-display: 'Cinzel', Georgia, serif;
   --font-body: 'Public Sans', -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   --radius-sm: 10px;
@@ -288,22 +292,42 @@ label {
 .link-slot .status.bad { color: var(--color-error); }
 .link-slot .status.checking { color: var(--color-text-muted); }
 
-.slot-mode-toggle { display: flex; gap: 0.4rem; margin: 0.4rem 0 0.6rem; }
-.slot-mode-btn {
-  flex: 1;
-  min-height: 38px;
-  padding: 0.4rem 0.6rem;
-  border-radius: 999px;
+/* Per-slot Link/Upload segmented toggle - nested pill, pulled from the
+   Claude Design import "Tragedy of the Commons.dc.html"'s submit screen. */
+.slot-mode-toggle {
+  display: flex;
+  gap: 3px;
+  width: fit-content;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 3px;
   border: 1px solid var(--color-border);
-  background: var(--color-card);
-  color: var(--color-text-muted);
-  font-size: 0.82rem;
-  font-weight: 600;
+  margin-bottom: 0.6rem;
 }
-.slot-mode-btn:hover { border-color: var(--color-accent); }
-.slot-mode-btn.selected { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-surface); }
+.slot-mode-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.45rem 0.75rem;
+  border-radius: 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+.slot-mode-tab.selected { background: var(--color-accent); color: var(--color-surface); }
+.slot-mode-tab .icon-link { width: 10px; height: 10px; border: 2px solid currentColor; border-radius: 6px; flex-shrink: 0; }
+.slot-mode-tab .icon-upload {
+  width: 0; height: 0; flex-shrink: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 7px solid currentColor;
+}
 
-.upload-control { display: flex; flex-direction: column; gap: 0.4rem; }
+/* The four upload-box states (idle/uploading/success/error), same design. */
 .upload-input {
   position: absolute;
   width: 1px;
@@ -312,23 +336,95 @@ label {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
-.upload-label {
-  display: inline-block;
-  text-align: center;
-  min-height: 44px;
-  line-height: 44px;
-  padding: 0 1rem;
+.upload-box {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
   background: var(--color-surface);
-  color: var(--color-text);
-  font-weight: 600;
-  font-size: 0.9rem;
-  cursor: pointer;
+  border: 1px solid var(--color-border);
 }
-.upload-label:hover { border-color: var(--color-accent); }
-.upload-input:focus-visible + .upload-label { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.upload-filename { margin: 0; font-size: 0.85rem; color: var(--color-text-muted); word-break: break-word; }
+.upload-box.idle { border: 2px dashed var(--color-border); }
+.upload-box.success { background: var(--color-success-bg); border-color: var(--color-success-border); }
+.upload-box.error { background: var(--color-error-bg); border-color: var(--color-error-border); }
+
+.upload-box-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--color-border-soft);
+  position: relative;
+  flex-shrink: 0;
+}
+.upload-box-icon .bar-h { position: absolute; top: 46%; left: 22%; right: 22%; height: 2px; background: var(--color-text-muted); }
+.upload-box-icon .bar-v { position: absolute; left: 46%; top: 22%; bottom: 22%; width: 2px; background: var(--color-text-muted); }
+
+.upload-box-icon.check {
+  border-radius: 50%;
+  background: var(--color-secondary);
+}
+.upload-box-icon.check .bar1 { position: absolute; width: 2px; height: 8px; background: var(--color-surface); left: 35%; top: 52%; transform: rotate(45deg); transform-origin: bottom; }
+.upload-box-icon.check .bar2 { position: absolute; width: 2px; height: 13px; background: var(--color-surface); left: 62%; top: 38%; transform: rotate(-45deg); transform-origin: bottom; }
+
+.upload-box-icon.error-icon {
+  border-radius: 50%;
+  background: var(--color-error);
+  color: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.upload-box-body { flex: 1; min-width: 0; }
+.upload-box-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.upload-box-title.success { color: var(--color-secondary); }
+.upload-box-title.error { color: var(--color-error); }
+.upload-box-subtitle { font-size: 0.7rem; color: var(--color-text-muted); margin-top: 2px; }
+
+/* .upload-browse-btn and .upload-replace-link are <label> elements (for
+   the hidden file input) styled as buttons/links - reset the generic
+   `label` rule's uppercase/letter-spacing/margin so they read as button
+   text, not a form-field label. */
+.upload-browse-btn, .upload-retry-btn, .upload-replace-link {
+  display: inline-block;
+  margin: 0;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.upload-browse-btn, .upload-retry-btn {
+  flex-shrink: 0;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--color-accent);
+  color: var(--color-surface);
+}
+.upload-retry-btn { background: var(--color-error); border: none; font-family: inherit; }
+.upload-replace-link {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  color: var(--color-accent);
+}
+
+.upload-progress-row { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.upload-progress-head { display: flex; justify-content: space-between; font-size: 0.75rem; }
+.upload-progress-filename { font-weight: 700; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
+.upload-progress-pct { color: var(--color-accent); font-weight: 700; }
 .upload-progress-track {
   height: 6px;
   border-radius: 999px;
@@ -339,8 +435,9 @@ label {
   height: 100%;
   background: var(--color-accent);
   border-radius: 999px;
-  transition: width 0.2s ease;
+  transition: width 0.2s linear;
 }
+.upload-progress-caption { font-size: 0.7rem; color: var(--color-text-muted); }
 
 /* Compiled presenter - a full-screen TikTok-style vertical feed, see
    js/presenter.js. Mobile web is the primary target: the wrap covers the
