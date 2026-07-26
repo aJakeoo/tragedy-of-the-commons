@@ -1,5 +1,6 @@
 import { validateAndResolveLink } from './linkValidation.js';
-import { submitPlayerLinks, closeSubmissionsAndCompile, uploadClipVideo } from './firebase.js';
+import { submitPlayerLinks, closeSubmissionsAndCompile } from './firebase.js';
+import { uploadClipVideo } from './cloudinaryUpload.js';
 import { mergeSubmissions } from './scoring.js';
 import { MAX_LINKS_PER_PLAYER, SUBMISSION_TIMER_SECONDS, MAX_UPLOAD_SIZE_MB, UPLOAD_ENABLED } from './config.js';
 import { showPhaseError } from './uiError.js';
@@ -233,20 +234,12 @@ async function handleFileSelected(i, file) {
       if (fill) fill.style.width = `${Math.round(progress * 100)}%`;
     });
     slot.uploadTask = task;
-    const url = await promise;
+    const result = await promise;
     if (slotState[i] !== slot) return;
     slot.uploadTask = null;
     slot.status = 'ok';
     slot.error = null;
-    slot.result = {
-      url,
-      platform: 'upload',
-      canonicalId: hash,
-      thumbnail: null,
-      title: file.name.replace(/\.[^.]+$/, ''),
-      author: '',
-      embedHtml: null,
-    };
+    slot.result = result; // { url, platform, canonicalId, thumbnail, title, author, embedHtml } - see cloudinaryUpload.js
     renderSlots();
     updateSubmitEnabled();
   } catch (err) {

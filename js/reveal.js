@@ -95,8 +95,9 @@ function revealVoterBreakdown(row, result, players, startDelayMs) {
 }
 
 // A thumbnail for the podium - the real video thumbnail when we have one
-// (TikTok oEmbed provides it; Instagram can't, see linkValidation.js; an
-// uploaded video has no server-generated thumbnail either), a
+// (TikTok oEmbed provides it; an uploaded clip gets a real Cloudinary
+// poster-frame derivative, see cloudinaryUpload.js; Instagram can't, see
+// linkValidation.js - that one's a genuine platform ceiling), a
 // platform-colored placeholder otherwise. TikTok thumbnail URLs are
 // signed and expire after a while, so a load failure falls back to the
 // placeholder too.

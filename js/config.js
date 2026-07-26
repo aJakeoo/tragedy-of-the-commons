@@ -31,18 +31,23 @@ export const PERSIST_SCORES_ACROSS_ROUNDS = false;
 // recover to a retryable state.
 export const FIRESTORE_WRITE_TIMEOUT_MS = 12000;
 
-// Uploaded video clips (Firebase Storage) - the alternative to pasting a
-// TikTok/Instagram link, toggled per slot in submission.js. Off for now:
-// this Firebase project is still on the Spark (free) plan, and Cloud
-// Storage for Firebase requires upgrading to Blaze before its rules can
-// even be deployed (confirmed live - deploy failed with a 403 enabling
-// firebasestorage.googleapis.com). The upload UI, hashing/dedup, Storage
-// upload call, and presenter/vote/reveal rendering are all fully built and
-// wired - flip this to true once the project is on Blaze and
-// `firebase deploy --only storage` succeeds.
-export const UPLOAD_ENABLED = false;
+// Uploaded video clips - the alternative to pasting a TikTok/Instagram
+// link, toggled per slot in submission.js. Originally built against
+// Firebase Storage (Session 12), but that requires upgrading the Firebase
+// project to the Blaze plan before its rules can even deploy. Swapped to
+// Cloudinary (Session 13) - unsigned, browser-direct upload with no
+// backend and no billing upgrade required. See js/cloudinaryUpload.js.
+export const UPLOAD_ENABLED = true;
 export const MAX_UPLOAD_SIZE_MB = 100;
 export const UPLOAD_TIMEOUT_MS = 180000; // uploads take much longer than a Firestore write
+
+// Cloudinary (video upload host for the "upload a video" submission mode).
+// CLOUDINARY_UPLOAD_PRESET must be an UNSIGNED preset (Cloudinary console:
+// Settings -> Upload -> Upload presets, Signing Mode = Unsigned) - that's
+// what makes a direct browser upload possible with no backend and no API
+// secret exposed client-side.
+export const CLOUDINARY_CLOUD_NAME = 'frr3iqfm';
+export const CLOUDINARY_UPLOAD_PRESET = 'tragedy-uploads';
 
 export const ROOM_CODE_LENGTH = 4;
 export const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I ambiguity
