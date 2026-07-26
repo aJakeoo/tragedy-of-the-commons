@@ -2,6 +2,7 @@ import { submitBallot, revealResults } from './firebase.js';
 import { sortEntries } from './scoring.js';
 import { VOTE_POINT_BUDGET } from './config.js';
 import { showPhaseError } from './uiError.js';
+import { platformLabel } from './format.js';
 
 let draft = {}; // { [entryId]: points }
 let boundRound = null;
@@ -49,7 +50,7 @@ function renderEntries(entries, budget) {
     div.className = 'ballot-entry';
 
     const title = document.createElement('div');
-    title.textContent = `${entry.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels'} - ${entry.title || entry.url}`;
+    title.textContent = `${platformLabel(entry.platform)} - ${entry.title || entry.url}`;
     div.appendChild(title);
 
     if ((entry.contributors || []).length > 1) {

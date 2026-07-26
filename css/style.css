@@ -288,6 +288,60 @@ label {
 .link-slot .status.bad { color: var(--color-error); }
 .link-slot .status.checking { color: var(--color-text-muted); }
 
+.slot-mode-toggle { display: flex; gap: 0.4rem; margin: 0.4rem 0 0.6rem; }
+.slot-mode-btn {
+  flex: 1;
+  min-height: 38px;
+  padding: 0.4rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.slot-mode-btn:hover { border-color: var(--color-accent); }
+.slot-mode-btn.selected { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-surface); }
+
+.upload-control { display: flex; flex-direction: column; gap: 0.4rem; }
+.upload-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.upload-label {
+  display: inline-block;
+  text-align: center;
+  min-height: 44px;
+  line-height: 44px;
+  padding: 0 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.upload-label:hover { border-color: var(--color-accent); }
+.upload-input:focus-visible + .upload-label { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.upload-filename { margin: 0; font-size: 0.85rem; color: var(--color-text-muted); word-break: break-word; }
+.upload-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-border-soft);
+  overflow: hidden;
+}
+.upload-progress-fill {
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
 /* Compiled presenter - a full-screen TikTok-style vertical feed, see
    js/presenter.js. Mobile web is the primary target: the wrap covers the
    entire viewport (fixed inset 0 - the page header and everything else sit
@@ -342,6 +396,7 @@ label {
 }
 .presenter-embed::-webkit-scrollbar { display: none; }
 .presenter-embed iframe { width: 100%; height: 100%; border: none; }
+.presenter-embed video.presenter-video { width: 100%; height: 100%; object-fit: contain; background: #000; }
 .presenter-embed blockquote.instagram-media,
 .presenter-embed iframe.instagram-media {
   max-width: 100% !important;
@@ -634,6 +689,7 @@ label {
 }
 .reveal-thumb-fallback.tiktok { background: linear-gradient(135deg, oklch(30% 0.03 260), oklch(18% 0.02 260)); }
 .reveal-thumb-fallback.instagram { background: linear-gradient(135deg, oklch(60% 0.19 330), oklch(62% 0.16 60)); }
+.reveal-thumb-fallback.upload { background: linear-gradient(135deg, oklch(55% 0.08 250), oklch(35% 0.06 250)); }
 .reveal-entry.winner .reveal-thumb { width: 84px; height: 112px; }
 .reveal-entry .points.points-final { transform: scale(1.15); }
 .voter-breakdown { margin-top: 0.4rem; display: flex; flex-wrap: wrap; gap: 0.3rem; }

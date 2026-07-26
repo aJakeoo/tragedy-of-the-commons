@@ -1,9 +1,11 @@
 import { setRevealAttribution, startVoting, revealResults, setActiveEntry } from './firebase.js';
 import { sortEntries } from './scoring.js';
 import { showPhaseError } from './uiError.js';
+import { platformLabel } from './format.js';
 import {
   buildTikTokPlayer,
   buildInstagramBlockquote,
+  buildUploadVideo,
   processInstagramEmbeds,
   registerEmbedCard,
   resetKnownEmbeds,
@@ -40,6 +42,8 @@ function buildCard(entryId, entry) {
 
   if (entry.platform === 'tiktok' && entry.canonicalId) {
     embedContainer.appendChild(buildTikTokPlayer(embedContainer));
+  } else if (entry.platform === 'upload') {
+    embedContainer.appendChild(buildUploadVideo(embedContainer));
   } else {
     // Instagram links (and a TikTok entry with no video ID for some
     // reason) fall back to Instagram's own embed widget.
@@ -51,7 +55,7 @@ function buildCard(entryId, entry) {
   // pointer-events:none in CSS so taps land on the clip underneath.
   const badge = document.createElement('p');
   badge.className = 'feed-badge';
-  badge.textContent = entry.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels';
+  badge.textContent = platformLabel(entry.platform);
   card.appendChild(badge);
 
   const caption = document.createElement('div');
@@ -199,11 +203,14 @@ function renderGrid(entries) {
   feedObserver = null;
   clearInterval(feedPoller);
 
+  // The sound button is only meaningful for clips this app actually
+  // controls playback/mute for - TikTok's Embed Player and uploaded
+  // <video> elements. Instagram's blockquote embed has no such control.
   const soundBtn = document.getElementById('feed-sound-btn');
-  const hasTikTokPlayer = entries.some(
-    ([, entry]) => entry.platform === 'tiktok' && entry.canonicalId
+  const hasControllableClip = entries.some(
+    ([, entry]) => (entry.platform === 'tiktok' && entry.canonicalId) || entry.platform === 'upload'
   );
-  soundBtn.classList.toggle('hidden', !hasTikTokPlayer || isSoundEnabled());
+  soundBtn.classList.toggle('hidden', !hasControllableClip || isSoundEnabled());
 
   for (const [entryId, entry] of entries) {
     feed.appendChild(buildCard(entryId, entry));

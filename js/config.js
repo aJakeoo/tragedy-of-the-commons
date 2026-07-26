@@ -31,6 +31,19 @@ export const PERSIST_SCORES_ACROSS_ROUNDS = false;
 // recover to a retryable state.
 export const FIRESTORE_WRITE_TIMEOUT_MS = 12000;
 
+// Uploaded video clips (Firebase Storage) - the alternative to pasting a
+// TikTok/Instagram link, toggled per slot in submission.js. Off for now:
+// this Firebase project is still on the Spark (free) plan, and Cloud
+// Storage for Firebase requires upgrading to Blaze before its rules can
+// even be deployed (confirmed live - deploy failed with a 403 enabling
+// firebasestorage.googleapis.com). The upload UI, hashing/dedup, Storage
+// upload call, and presenter/vote/reveal rendering are all fully built and
+// wired - flip this to true once the project is on Blaze and
+// `firebase deploy --only storage` succeeds.
+export const UPLOAD_ENABLED = false;
+export const MAX_UPLOAD_SIZE_MB = 100;
+export const UPLOAD_TIMEOUT_MS = 180000; // uploads take much longer than a Firestore write
+
 export const ROOM_CODE_LENGTH = 4;
 export const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I ambiguity
 

@@ -1,13 +1,99 @@
 import { validateAndResolveLink } from './linkValidation.js';
-import { submitPlayerLinks, closeSubmissionsAndCompile } from './firebase.js';
+import { submitPlayerLinks, closeSubmissionsAndCompile, uploadClipVideo } from './firebase.js';
 import { mergeSubmissions } from './scoring.js';
-import { MAX_LINKS_PER_PLAYER, SUBMISSION_TIMER_SECONDS } from './config.js';
+import { MAX_LINKS_PER_PLAYER, SUBMISSION_TIMER_SECONDS, MAX_UPLOAD_SIZE_MB, UPLOAD_ENABLED } from './config.js';
 import { showPhaseError } from './uiError.js';
 
-let slotState = []; // [{ url, status: 'empty'|'checking'|'ok'|'bad', result, error }]
+let slotState = []; // [{ mode: 'link'|'upload', url, status: 'empty'|'checking'|'ok'|'bad', result, error, fileName, progress, uploadTask }]
 let timerInterval = null;
 let timerStartedAtRound = null;
 let bound = false;
+let currentCode = null;
+let currentRound = null;
+
+function freshSlotState() {
+  return Array.from({ length: MAX_LINKS_PER_PLAYER }, () => ({ mode: 'link', url: '', status: 'empty' }));
+}
+
+function cancelSlotUpload(slot) {
+  if (slot?.uploadTask) {
+    try { slot.uploadTask.cancel(); } catch {}
+    slot.uploadTask = null;
+  }
+}
+
+async function hashFile(file) {
+  const buf = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function setSlotMode(i, mode) {
+  const slot = slotState[i];
+  if (slot.mode === mode) return;
+  cancelSlotUpload(slot);
+  slotState[i] = { mode, url: '', status: 'empty' };
+  renderSlots();
+  updateSubmitEnabled();
+}
+
+function buildLinkInput(i, slot) {
+  const input = document.createElement('input');
+  input.type = 'url';
+  input.id = `link-input-${i}`;
+  input.placeholder = 'Paste a TikTok or Instagram Reels link';
+  input.value = slot.url || '';
+  input.addEventListener('input', () => {
+    slot.url = input.value;
+    slot.status = input.value.trim() ? 'checking' : 'empty';
+    slot.error = null;
+    scheduleCheck(i);
+    renderStatus(i);
+  });
+  return input;
+}
+
+function buildUploadControl(i, slot) {
+  const wrap = document.createElement('div');
+  wrap.className = 'upload-control';
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'video/*';
+  fileInput.id = `upload-input-${i}`;
+  fileInput.className = 'upload-input';
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (file) handleFileSelected(i, file);
+  });
+
+  const label = document.createElement('label');
+  label.setAttribute('for', `upload-input-${i}`);
+  label.className = 'upload-label';
+  label.textContent = slot.fileName ? 'Choose a different video' : 'Choose a video from your library';
+
+  wrap.append(fileInput, label);
+
+  if (slot.fileName) {
+    const nameEl = document.createElement('p');
+    nameEl.className = 'upload-filename';
+    nameEl.textContent = slot.fileName;
+    wrap.appendChild(nameEl);
+  }
+
+  if (slot.status === 'checking') {
+    const track = document.createElement('div');
+    track.className = 'upload-progress-track';
+    const fill = document.createElement('div');
+    fill.className = 'upload-progress-fill';
+    fill.id = `upload-progress-fill-${i}`;
+    fill.style.width = `${Math.round((slot.progress || 0) * 100)}%`;
+    track.appendChild(fill);
+    wrap.appendChild(track);
+  }
+
+  return wrap;
+}
 
 function renderSlots() {
   const container = document.getElementById('link-slots');
@@ -17,27 +103,36 @@ function renderSlots() {
     div.className = 'link-slot' + (slot.status === 'ok' ? ' valid' : slot.status === 'bad' ? ' invalid' : '');
 
     const label = document.createElement('label');
-    label.textContent = `Link ${i + 1}`;
-    label.setAttribute('for', `link-input-${i}`);
+    label.textContent = `Clip ${i + 1}`;
+    div.appendChild(label);
 
-    const input = document.createElement('input');
-    input.type = 'url';
-    input.id = `link-input-${i}`;
-    input.placeholder = 'Paste a TikTok or Instagram Reels link';
-    input.value = slot.url || '';
-    input.addEventListener('input', () => {
-      slot.url = input.value;
-      slot.status = input.value.trim() ? 'checking' : 'empty';
-      slot.error = null;
-      scheduleCheck(i);
-      renderStatus(i);
-    });
+    // Gated off for now - see UPLOAD_ENABLED in config.js. The toggle only
+    // renders (and a slot can only ever be in 'upload' mode) once uploads
+    // have somewhere to land.
+    if (UPLOAD_ENABLED) {
+      const toggle = document.createElement('div');
+      toggle.className = 'slot-mode-toggle';
+      const pasteBtn = document.createElement('button');
+      pasteBtn.type = 'button';
+      pasteBtn.className = 'slot-mode-btn' + (slot.mode === 'upload' ? '' : ' selected');
+      pasteBtn.textContent = 'Paste a link';
+      pasteBtn.addEventListener('click', () => setSlotMode(i, 'link'));
+      const uploadBtn = document.createElement('button');
+      uploadBtn.type = 'button';
+      uploadBtn.className = 'slot-mode-btn' + (slot.mode === 'upload' ? ' selected' : '');
+      uploadBtn.textContent = 'Upload a video';
+      uploadBtn.addEventListener('click', () => setSlotMode(i, 'upload'));
+      toggle.append(pasteBtn, uploadBtn);
+      div.appendChild(toggle);
+    }
+
+    div.appendChild(slot.mode === 'upload' ? buildUploadControl(i, slot) : buildLinkInput(i, slot));
 
     const status = document.createElement('div');
     status.className = 'status';
     status.id = `link-status-${i}`;
+    div.appendChild(status);
 
-    div.append(label, input, status);
     container.appendChild(div);
   });
   slotState.forEach((_, i) => renderStatus(i));
@@ -51,14 +146,16 @@ function renderStatus(i) {
   el.className = 'status';
   slotDiv?.classList.remove('valid', 'invalid');
   if (slot.status === 'checking') {
-    el.textContent = 'Checking...';
+    el.textContent = slot.mode === 'upload' ? 'Uploading...' : 'Checking...';
     el.classList.add('checking');
   } else if (slot.status === 'ok') {
-    el.textContent = `Looks good${slot.result?.unverifiable ? ' (format valid - Instagram can’t be auto-verified)' : ''}.`;
+    el.textContent = slot.mode === 'upload'
+      ? 'Video uploaded.'
+      : `Looks good${slot.result?.unverifiable ? ' (format valid - Instagram can’t be auto-verified)' : ''}.`;
     el.classList.add('ok');
     slotDiv?.classList.add('valid');
   } else if (slot.status === 'bad') {
-    el.textContent = slot.error || "This link didn't work - try another.";
+    el.textContent = slot.error || (slot.mode === 'upload' ? "That upload didn't work - try again." : "This link didn't work - try another.");
     el.classList.add('bad');
     slotDiv?.classList.add('invalid');
   } else {
@@ -99,6 +196,69 @@ async function checkSlot(i) {
   updateSubmitEnabled();
 }
 
+async function handleFileSelected(i, file) {
+  const slot = slotState[i];
+  cancelSlotUpload(slot);
+
+  if (!file.type.startsWith('video/')) {
+    slot.status = 'bad';
+    slot.error = "That file doesn't look like a video - pick a video from your library.";
+    slot.fileName = file.name;
+    renderSlots();
+    updateSubmitEnabled();
+    return;
+  }
+  if (file.size > MAX_UPLOAD_SIZE_MB * 1024 * 1024) {
+    slot.status = 'bad';
+    slot.error = `That video is too big (max ${MAX_UPLOAD_SIZE_MB}MB).`;
+    slot.fileName = file.name;
+    renderSlots();
+    updateSubmitEnabled();
+    return;
+  }
+
+  slot.status = 'checking';
+  slot.fileName = file.name;
+  slot.progress = 0;
+  slot.error = null;
+  renderSlots();
+
+  try {
+    const hash = await hashFile(file);
+    if (slotState[i] !== slot) return; // slot was switched back to link mode mid-hash
+    const { task, promise } = uploadClipVideo(currentCode, currentRound, file, hash, progress => {
+      if (slotState[i] !== slot) return;
+      slot.progress = progress;
+      const fill = document.getElementById(`upload-progress-fill-${i}`);
+      if (fill) fill.style.width = `${Math.round(progress * 100)}%`;
+    });
+    slot.uploadTask = task;
+    const url = await promise;
+    if (slotState[i] !== slot) return;
+    slot.uploadTask = null;
+    slot.status = 'ok';
+    slot.error = null;
+    slot.result = {
+      url,
+      platform: 'upload',
+      canonicalId: hash,
+      thumbnail: null,
+      title: file.name.replace(/\.[^.]+$/, ''),
+      author: '',
+      embedHtml: null,
+    };
+    renderSlots();
+    updateSubmitEnabled();
+  } catch (err) {
+    if (slotState[i] !== slot) return;
+    slot.uploadTask = null;
+    slot.status = 'bad';
+    slot.error = err?.message === 'TIMED_OUT' ? 'Upload timed out - try again.' : "That upload didn't work - try again.";
+    renderSlots();
+    updateSubmitEnabled();
+  }
+}
+
 function updateSubmitEnabled() {
   const hasValid = slotState.some(s => s.status === 'ok');
   document.getElementById('submit-links-btn').disabled = !hasValid;
@@ -130,10 +290,12 @@ function startTimer(round) {
 
 export function render(room, ctx) {
   const round = room.round;
+  currentCode = ctx.code;
+  currentRound = round;
 
   if (!bound) {
     bound = true;
-    slotState = Array.from({ length: MAX_LINKS_PER_PLAYER }, () => ({ url: '', status: 'empty' }));
+    slotState = freshSlotState();
     renderSlots();
 
     document.getElementById('submit-links-btn').addEventListener('click', async () => {
@@ -175,7 +337,8 @@ export function render(room, ctx) {
   // Reset per-round UI state when a fresh round starts (round number changed
   // since this module last saw it and no submissions exist yet for it).
   if (timerStartedAtRound !== round) {
-    slotState = Array.from({ length: MAX_LINKS_PER_PLAYER }, () => ({ url: '', status: 'empty' }));
+    slotState.forEach(cancelSlotUpload);
+    slotState = freshSlotState();
     renderSlots();
     document.getElementById('submitted-note').classList.add('hidden');
     startTimer(round);

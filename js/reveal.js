@@ -1,7 +1,7 @@
 import { tallyResults, tallyDetectiveScores } from './scoring.js';
 import { startNewRound } from './firebase.js';
 import { showPhaseError } from './uiError.js';
-import { ordinal } from './format.js';
+import { ordinal, platformLabel } from './format.js';
 
 let animatedForRound = null;
 let cachedResults = null;
@@ -95,7 +95,8 @@ function revealVoterBreakdown(row, result, players, startDelayMs) {
 }
 
 // A thumbnail for the podium - the real video thumbnail when we have one
-// (TikTok oEmbed provides it; Instagram can't, see linkValidation.js), a
+// (TikTok oEmbed provides it; Instagram can't, see linkValidation.js; an
+// uploaded video has no server-generated thumbnail either), a
 // platform-colored placeholder otherwise. TikTok thumbnail URLs are
 // signed and expire after a while, so a load failure falls back to the
 // placeholder too.
@@ -104,7 +105,7 @@ function buildThumb(r) {
   wrap.className = 'reveal-thumb';
   const placeholder = document.createElement('span');
   placeholder.className = `reveal-thumb-fallback ${r.platform}`;
-  placeholder.textContent = r.platform === 'tiktok' ? 'TT' : 'IG';
+  placeholder.textContent = r.platform === 'tiktok' ? 'TT' : r.platform === 'upload' ? 'VID' : 'IG';
   wrap.appendChild(placeholder);
   if (r.thumbnail) {
     const img = document.createElement('img');
@@ -141,7 +142,7 @@ function renderLeaderboard(results, players) {
     info.style.flex = '1';
     info.style.margin = '0 0.75rem';
     const titleLine = document.createElement('div');
-    titleLine.textContent = `${r.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels'} - ${r.title || r.url}`;
+    titleLine.textContent = `${platformLabel(r.platform)} - ${r.title || r.url}`;
     const subLine = document.createElement('div');
     subLine.className = 'muted';
     subLine.textContent = contributorsLabel(r);
@@ -257,7 +258,7 @@ export function render(room, ctx) {
       const winner = cachedResults.find(r => r.rank === 1);
       if (winner) {
         document.getElementById('champion-handle').textContent =
-          `${winner.platform === 'tiktok' ? 'TikTok' : 'Instagram Reels'} - ${winner.title || winner.url}`;
+          `${platformLabel(winner.platform)} - ${winner.title || winner.url}`;
         banner.classList.add('visible');
       }
     }, settleMs));

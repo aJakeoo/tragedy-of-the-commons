@@ -110,6 +110,9 @@ export function enableSound() {
   if (info?.platform === 'tiktok' && info.iframe && info.loadedMuted) {
     info.soundGambleFailed = false; // an explicit tap earns a fresh try
     soundGamble(activeContainer);
+  } else if (info?.platform === 'upload' && info.videoEl) {
+    info.videoEl.muted = false;
+    info.videoEl.play().catch(() => {});
   }
 }
 
@@ -240,6 +243,29 @@ function promotePending(container) {
   markSoundEnabled();
 }
 
+// Uploaded clips render as a plain same-origin-controllable <video>, not a
+// cross-origin iframe - no postMessage relay, no "does the browser trust
+// this gesture" gamble like TikTok's Embed Player. Not autoplayed until
+// this card actually becomes the active one (startContainer below); a
+// video sitting off-screen in the feed shouldn't be pulling bandwidth.
+export function buildUploadVideo(container) {
+  const info = cardInfo.get(container);
+  const video = document.createElement('video');
+  video.src = info.url;
+  video.className = 'presenter-video';
+  video.playsInline = true;
+  video.loop = true;
+  video.muted = true;
+  video.preload = 'metadata';
+  info.videoEl = video;
+  if (activeContainer === null) {
+    activeContainer = container;
+    emitActiveClipChanged(container);
+    startContainer(container);
+  }
+  return video;
+}
+
 function rebuildContainer(container) {
   const info = cardInfo.get(container);
   if (!info) return;
@@ -260,6 +286,11 @@ function rebuildContainer(container) {
 function stopContainer(container) {
   const info = cardInfo.get(container);
   if (!info) return;
+
+  if (info.platform === 'upload') {
+    info.videoEl?.pause();
+    return;
+  }
 
   if (info.platform === 'tiktok' && info.iframe) {
     // Scrolled away mid-gamble: discard the hidden attempt (it hasn't
@@ -284,7 +315,25 @@ function stopContainer(container) {
 // blockquote is what starts it, same as always.
 function startContainer(container) {
   const info = cardInfo.get(container);
-  if (!info || info.platform !== 'tiktok' || !info.iframe) return;
+  if (!info) return;
+
+  if (info.platform === 'upload') {
+    if (!info.videoEl) return;
+    if (soundEnabled) {
+      info.videoEl.muted = false;
+      info.videoEl.play().then(markSoundEnabled).catch(() => {
+        // Autoplay-with-sound blocked for this clip specifically - fall
+        // back to muted rather than leaving it paused and silent.
+        info.videoEl.muted = true;
+        info.videoEl.play().catch(() => {});
+      });
+    } else {
+      info.videoEl.play().catch(() => {});
+    }
+    return;
+  }
+
+  if (info.platform !== 'tiktok' || !info.iframe) return;
   if (info.ready) {
     postToPlayer(info.iframe, 'play');
     // A player that loaded unmuted already has sound permission - `play`
@@ -484,6 +533,7 @@ export function registerEmbedCard(container, info) {
     ready: false,
     fellBack: false,
     iframe: null,
+    videoEl: null,
     loadedMuted: true,
     muteState: undefined,
     lastState: undefined,

@@ -24,3 +24,11 @@ export function ordinal(n) {
   const v = n % 100;
   return n + (suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0]);
 }
+
+// A submission's source, shown as a badge/label wherever an entry is listed
+// (presenter feed, ballot, reveal podium).
+export function platformLabel(platform) {
+  if (platform === 'tiktok') return 'TikTok';
+  if (platform === 'upload') return 'Uploaded video';
+  return 'Instagram Reels';
+}

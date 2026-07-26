@@ -11,12 +11,20 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 import {
+  getStorage,
+  ref,
+  uploadBytesResumable,
+  getDownloadURL,
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
+
+import {
   MAX_LINKS_PER_PLAYER,
   SUBMISSION_TIMER_SECONDS,
   VOTE_POINT_BUDGET,
   MERGE_VOTE_MULTIPLIER_PER_CONTRIBUTOR,
   PERSIST_SCORES_ACROSS_ROUNDS,
   FIRESTORE_WRITE_TIMEOUT_MS,
+  UPLOAD_TIMEOUT_MS,
   DEFAULT_PLAY_MODE,
 } from './config.js';
 
@@ -52,6 +60,7 @@ const FIREBASE_CONFIG = {
 
 const app = initializeApp(FIREBASE_CONFIG);
 const db = getFirestore(app);
+const storage = getStorage(app);
 
 const roomRef = code => doc(db, 'rooms', code);
 
@@ -164,6 +173,36 @@ export async function startRound(code, round) {
       ballots: {},
     },
   }));
+}
+
+// Uploads a device video (the "upload a video" alternative to pasting a
+// link - see submission.js) to Storage under this room/round, keyed by the
+// file's own content hash so two players uploading the same bytes land on
+// the same object instead of duplicating storage. Returns the upload task
+// (so a caller can cancel(), e.g. the user switches slots mid-upload)
+// alongside a promise that resolves to the public download URL. Wrapped in
+// its own, much longer timeout than withTimeout's default - a multi-minute
+// mobile video upload isn't the "hung Firestore write" this app's other
+// timeout is guarding against.
+export function uploadClipVideo(code, round, file, hash, onProgress) {
+  const ext = (file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
+  const path = `rooms/${code}/uploads/${round}/${hash}.${ext}`;
+  const task = uploadBytesResumable(ref(storage, path), file, { contentType: file.type || 'video/mp4' });
+  const promise = withTimeout(
+    new Promise((resolve, reject) => {
+      task.on(
+        'state_changed',
+        snap => onProgress?.(snap.totalBytes ? snap.bytesTransferred / snap.totalBytes : 0),
+        reject,
+        () => getDownloadURL(task.snapshot.ref).then(resolve, reject)
+      );
+    }),
+    UPLOAD_TIMEOUT_MS
+  ).catch(err => {
+    task.cancel();
+    throw err;
+  });
+  return { task, promise };
 }
 
 export async function submitPlayerLinks(code, round, playerId, playerName, links) {

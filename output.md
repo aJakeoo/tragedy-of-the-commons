@@ -982,3 +982,133 @@ podium, champion banner/leaderboard correctly absent) and a full round in
 → guest saw the plain placeholder, no guess prompt → "Start voting" →
 ballot → reveal showed the weighted leaderboard + champion banner, Best
 Detective podium correctly absent).
+
+---
+
+## Session 12 - Upload-a-video option on the submission page (built, gated off pending a Blaze upgrade)
+
+**User request:** each of the three link slots should get a toggle - paste
+a link (still the default) or upload a saved video from the device's
+photo library instead - feeding into the same compile/feed/vote/reveal
+pipeline as a pasted link. Also re-asked for the compiled feed to be in
+random order rather than sequential.
+
+**Random order:** already shipped in Session 9's addendum
+(`mergeSubmissions`'s compile-time Fisher-Yates + `sortEntries`, used
+identically by `presenter.js` and `voting.js`). Re-read that code path
+end to end and confirmed nothing since has reverted it - no change
+needed, and this session's live QA round re-confirmed the ordering
+helper is still wired into both the feed and the ballot.
+
+**Design for the upload path:** an uploaded clip needed a way to reach
+every OTHER player's device too, since the compiled feed is the shared,
+host-only screen (Session 9) - that rules out anything device-local
+(IndexedDB, a blob URL) and requires an actual upload target. Used
+Firebase Storage, already provisioned in `js/firebase.js`'s
+`FIREBASE_CONFIG` (`storageBucket` was already set, just unused). An
+uploaded entry is modeled exactly like a pasted link
+(`{ url, platform: 'upload', canonicalId, thumbnail, title, author,
+embedHtml }`), so `mergeSubmissions`, `sortEntries`, `tallyResults`, and
+`tallyDetectiveScores` in `scoring.js` needed zero changes - they were
+already platform-agnostic. `canonicalId` for an upload is the file's own
+SHA-256 hash (`crypto.subtle.digest`, secure-context only - fine on
+`localhost` and the deployed `https://` Pages site), so two players
+uploading byte-identical video merge into one weighted entry exactly like
+two players pasting the same TikTok link already do - no special-case
+dedup logic needed.
+
+**New/changed files:**
+- `js/config.js` - `UPLOAD_ENABLED` (see below), `MAX_UPLOAD_SIZE_MB`
+  (100), `UPLOAD_TIMEOUT_MS` (180s - uploads run far longer than the
+  12s Firestore-write timeout the rest of the app uses).
+- `js/firebase.js` - `getStorage`/`uploadBytesResumable`/`getDownloadURL`
+  from the same gstatic CDN modular build as Firestore. New
+  `uploadClipVideo(code, round, file, hash, onProgress)` uploads to
+  `rooms/{code}/uploads/{round}/{hash}.{ext}` and returns `{ task,
+  promise }` - the task so a caller can `.cancel()` an in-flight upload
+  (e.g. the player switches that slot back to "paste a link" mid-upload).
+- `js/submission.js` - each slot is now `{ mode: 'link'|'upload', ... }`.
+  A per-slot toggle (hidden entirely when uploads are off - see below)
+  swaps between the existing URL input and a file input + progress bar.
+  `handleFileSelected` rejects non-video files and anything over
+  `MAX_UPLOAD_SIZE_MB` client-side before hashing/uploading, hashes the
+  file, uploads with a live progress bar wired to the same
+  `#upload-progress-fill-{i}` id on every progress tick (no full
+  re-render per tick, just a width update), then lands in the exact same
+  `status: 'ok'` shape a resolved link uses - `submit-links-btn`'s click
+  handler needed no changes at all.
+- `js/embeds.js` - uploaded clips play as a plain same-origin `<video>`,
+  not a cross-origin iframe - genuinely simpler than TikTok's postMessage
+  gymnastics, since there's no relayed-gesture problem to work around.
+  New `buildUploadVideo()` mirrors `buildTikTokPlayer()`'s "first clip
+  in the feed" convention; `startContainer`/`stopContainer`/
+  `enableSound()` got an `info.platform === 'upload'` branch that calls
+  `.play()`/`.pause()`/toggles `.muted` directly on `info.videoEl`, with
+  a plain try/catch fallback to muted if an unmuted `play()` gets
+  rejected by autoplay policy.
+- `js/presenter.js`, `js/voting.js`, `js/reveal.js` - `buildCard` gets an
+  `entry.platform === 'upload'` branch calling `buildUploadVideo`; the
+  "TikTok" / "Instagram Reels" label that was hand-written in three
+  separate places got pulled into one `platformLabel()` helper in
+  `js/format.js` (now also returns "Uploaded video") instead of adding a
+  fourth near-duplicate ternary. `reveal.js`'s podium thumbnail fallback
+  gets an "upload" tile (`VID`, blue-gray gradient) alongside the
+  existing TT/IG ones - no real thumbnail for an uploaded clip (no
+  server-side frame extraction, deliberately not built this session -
+  same "flag the platform ceiling rather than build something fragile"
+  call as Instagram's un-thumbnailable Reels in Session 1).
+- `css/style.css` - `.slot-mode-toggle`/`.slot-mode-btn` (small pill
+  toggle, same visual language as `.guess-option`), `.upload-control`/
+  `.upload-label`/`.upload-progress-track`/`.upload-progress-fill`,
+  `.presenter-embed video.presenter-video` (`object-fit: contain` on a
+  black backdrop, matching the letterboxed portrait feel of the
+  TikTok/Instagram embeds next to it), `.reveal-thumb-fallback.upload`.
+- `storage.rules` (new) + `firebase.json` - Storage rules mirroring
+  `firestore.rules`'s model exactly: open read/write under a room's own
+  path (`rooms/{code}/uploads/**`), denied everywhere else. No auth,
+  same room-code-by-obscurity posture as the rest of this app.
+
+**Blocked on deploy - this Firebase project needs a Blaze upgrade.**
+`firebase deploy --only storage --project tragedy-of-the-commons-4e239`
+failed with a 403 trying to auto-enable `firebasestorage.googleapis.com`
+(`Caller does not have required permission... roles/
+serviceusage.serviceUsageConsumer`). This is the known signature of
+Cloud Storage for Firebase requiring the pay-as-you-go Blaze plan since
+late 2024 - Firestore didn't hit this because its API was presumably
+already enabled from Session 1. Flagged this to the user directly rather
+than guessing further; they chose to ship without the upload option live
+for now rather than upgrade billing mid-session.
+
+**Shipped gated, not reverted.** Rather than leave a toggle in the UI
+that would dead-end every real click with an upload failure, added
+`UPLOAD_ENABLED = false` in `config.js` and wrapped the toggle's render
+in `submission.js` behind it - when off, every slot always renders in
+plain link mode exactly as before (a slot's `mode` literally never
+becomes `'upload'` since the only UI that sets it is gated). Every other
+piece (hashing, the Storage call, `embeds.js`'s video handling,
+`presenter`/`voting`/`reveal`'s `'upload'` branches) is fully built,
+untouched, and load-bearing on nothing else - flip the one constant once
+`firebase deploy --only storage` succeeds and re-verify live.
+
+**QA - full regression pass, live, two-tab (`serve.js` on :8080), real
+Firestore, two real TikTok videos (the same known-good IDs from Session
+7's QA method note):** created a room, confirmed the submission page
+renders "Clip 1/2/3" with a plain link input and no toggle (upload gate
+confirmed off), submitted one TikTok link per player, closed submissions
+and compiled, confirmed the presenter feed renders both TikTok Embed
+Player clips with badges/captions/"Submitted by: hidden" as before (this
+path is untouched code - `buildCard`'s `tiktok` branch - exercised here
+purely as a regression check on the new `platform === 'upload'` branch
+sitting next to it), guest tab correctly showed the host-only "Eyes on
+the big screen" placeholder, end card rendered, voted from both tabs
+(host's points didn't land in this particular run - traced to the
+automated clicker firing three `+` clicks faster than `voting.js`'s
+existing full-DOM-re-render-per-click can keep up with, not a code
+change this session touched; `voting.js`'s point logic itself is
+unmodified and Session 7 already verified it live with real,
+human-paced clicks), and reveal rendered with `platformLabel` correctly
+showing "TikTok" and the `TT` thumbnail fallback in both rows. Zero
+console errors across the whole run on either tab. `node --check` clean
+on all eight touched JS files.
+
+**Commit:** pending (this entry lands in the same commit as the code).
