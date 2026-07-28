@@ -210,6 +210,16 @@ export async function submitGuess(code, round, entryId, guesserPlayerId, guessed
   }));
 }
 
+// One field per (entry, voter), keyed by entry exactly like guesses above -
+// so a skip tally is scoped to one clip and resets structurally when the
+// feed moves on, with no per-clip cleanup write. A vote is one-way (there's
+// no un-vote in the UI), so this only ever writes true.
+export async function voteToSkip(code, round, entryId, playerId) {
+  await withTimeout(updateDoc(roomRef(code), {
+    [`rounds.${round}.skipVotes.${entryId}.${playerId}`]: true,
+  }));
+}
+
 export async function startVoting(code) {
   await withTimeout(updateDoc(roomRef(code), { status: 'voting' }));
 }

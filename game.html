@@ -40,6 +40,18 @@
     <div class="presenter-feed-wrap hidden" id="presenter-feed-wrap">
       <div id="presenter-grid" class="presenter-feed"></div>
       <button id="feed-sound-btn" class="feed-sound-btn hidden">Tap for sound</button>
+
+      <!-- Shown once enough guests have voted to skip the current clip
+           (js/presenter.js renderSkipPrompt). A prompt, not an auto-skip -
+           the host casting the screen keeps the call. Sits outside
+           #presenter-grid so rebuilding the feed doesn't destroy it. -->
+      <div id="skip-prompt" class="skip-prompt hidden" role="status" aria-live="polite">
+        <p class="skip-prompt-text" id="skip-prompt-text"></p>
+        <div class="skip-prompt-actions">
+          <button type="button" id="skip-prompt-skip-btn" class="skip-prompt-skip">Skip it</button>
+          <button type="button" id="skip-prompt-keep-btn" class="skip-prompt-keep">Keep watching</button>
+        </div>
+      </div>
     </div>
 
     <!-- Guests don't get the feed - the host casts it to the shared screen.
@@ -54,6 +66,16 @@
         <p class="guess-prompt">Who submitted this one?</p>
         <div id="guess-options" class="guess-options"></div>
         <p class="guess-own-note hidden" id="guess-own-note">This one's yours!</p>
+      </div>
+
+      <!-- Vote to skip whatever is playing on the big screen (js/skipVote.js).
+           Runs in both play modes, so it lives outside #guess-panel. -->
+      <div id="skip-vote-panel" class="skip-vote hidden">
+        <button type="button" id="skip-vote-btn" class="skip-vote-btn">
+          <span class="skip-vote-ripple" aria-hidden="true"></span>
+          <span class="skip-vote-label" id="skip-vote-label">Skip this clip</span>
+        </button>
+        <p class="skip-vote-tally muted" id="skip-vote-tally"></p>
       </div>
     </div>
 

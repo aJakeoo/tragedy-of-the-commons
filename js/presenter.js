@@ -1,5 +1,5 @@
 import { setRevealAttribution, startVoting, revealResults, setActiveEntry } from './firebase.js';
-import { sortEntries } from './scoring.js';
+import { sortEntries, tallySkipVotes } from './scoring.js';
 import { showPhaseError } from './uiError.js';
 import { platformLabel } from './format.js';
 import {
@@ -22,6 +22,7 @@ let renderedEntryIds = null; // sorted, joined - identifies the current feed's c
 let feedObserver = null;
 let feedPoller = 0;
 let currentCode = null; // set on the host's client only - see the isHost guard in render()
+let skipDismissed = new Set(); // entryIds the host chose to keep watching - see renderSkipPrompt
 
 function buildCard(entryId, entry) {
   const card = document.createElement('div');
@@ -161,6 +162,67 @@ function observeFeed(feed) {
   }, 500);
 }
 
+// Advances the feed one slide, which is all "skip" means here - the feed's
+// own snap detection (observeFeed above) picks the new card up and re-syncs
+// activeEntryId/audio from there, so this deliberately doesn't call
+// activateCard itself. Smooth-scrolling rather than jumping keeps it reading
+// as the same gesture a swipe would make.
+function skipToNextCard() {
+  const feed = document.getElementById('presenter-grid');
+  const cards = feed.querySelectorAll('.presenter-card');
+  if (!cards.length) return;
+  const index = Math.round(feed.scrollTop / feed.clientHeight);
+  const next = Math.min(index + 1, cards.length - 1);
+  const target = next * feed.clientHeight;
+  feed.scrollTo({ top: target, behavior: 'smooth' });
+
+  // Smooth scrolling is driven by the rendering pipeline, which this feed
+  // has already been observed stalling (see observeFeed's poller note) - and
+  // it doesn't run at all while the tab is backgrounded. A skip that
+  // silently does nothing is the worst outcome for this button, so if the
+  // feed hasn't actually moved by the time the animation should be well
+  // underway, jump it there outright.
+  setTimeout(() => {
+    if (Math.abs(feed.scrollTop - target) > 4) feed.scrollTo({ top: target, behavior: 'auto' });
+  }, 600);
+}
+
+// The banner that appears over the feed once enough guests have voted to
+// skip whatever is currently playing (see tallySkipVotes / js/skipVote.js).
+// It's a prompt, not an automatic skip: the host is the one casting to the
+// shared screen and keeps the final call, so this offers "Skip it" and
+// "Keep watching" rather than yanking the clip out from under them.
+function renderSkipPrompt(roundData, players, hostId, activeEntryId) {
+  const prompt = document.getElementById('skip-prompt');
+  if (!activeEntryId || skipDismissed.has(activeEntryId)) {
+    prompt.classList.add('hidden');
+    return;
+  }
+
+  // Only prompt about the clip the host is ACTUALLY looking at. activeEntryId
+  // makes a Firestore round trip, and that write has been observed lagging by
+  // 15s+ on a slow connection (see output.md) - long enough for the feed to
+  // have moved on, or reached the end card, while the field still names the
+  // previous clip. Guests vote against whatever activeEntryId says, so the
+  // tally is keyed correctly either way; this just holds the banner back
+  // until the host's own screen agrees with it.
+  const feed = document.getElementById('presenter-grid');
+  const cards = feed.querySelectorAll('.presenter-card');
+  const onScreen = cards[Math.round(feed.scrollTop / feed.clientHeight)];
+  if (onScreen?.dataset.entryId !== activeEntryId) {
+    prompt.classList.add('hidden');
+    return;
+  }
+
+  const stats = tallySkipVotes(roundData, activeEntryId, players, hostId);
+  prompt.classList.toggle('hidden', !stats.reached);
+  if (!stats.reached) return;
+
+  const noun = stats.voted === 1 ? 'player wants' : 'players want';
+  document.getElementById('skip-prompt-text').textContent =
+    `${stats.voted} of ${stats.eligible} ${noun} to skip this one.`;
+}
+
 // The final feed slide: after the last clip, snapping down lands on the
 // "what happens next" card - the host's attribution toggle + Start voting
 // button, or the guest's waiting note. Those elements live in game.html
@@ -249,6 +311,7 @@ export function render(room, ctx) {
   if (presenterRound !== round) {
     presenterRound = round;
     startingVoting = false;
+    skipDismissed = new Set();
     const startBtn = document.getElementById('start-voting-btn');
     startBtn.disabled = entries.length === 0;
     startBtn.textContent = startBtnLabel;
@@ -277,6 +340,25 @@ export function render(room, ctx) {
         showPhaseError(err);
       }
     });
+    document.getElementById('skip-prompt-skip-btn').addEventListener('click', () => {
+      const r = window.__totcCurrentRoom;
+      const activeId = r?.rounds?.[r.round]?.activeEntryId;
+      // Dismiss on the way out too: the banner would otherwise sit there for
+      // the length of the smooth scroll, since the tally for the clip we're
+      // leaving stays over threshold until activeEntryId catches up.
+      if (activeId) skipDismissed.add(activeId);
+      document.getElementById('skip-prompt').classList.add('hidden');
+      skipToNextCard();
+    });
+    document.getElementById('skip-prompt-keep-btn').addEventListener('click', () => {
+      const r = window.__totcCurrentRoom;
+      const activeId = r?.rounds?.[r.round]?.activeEntryId;
+      // Per-clip and host-local: overruling the vote on this clip shouldn't
+      // stop the room asking again on the next one.
+      if (activeId) skipDismissed.add(activeId);
+      document.getElementById('skip-prompt').classList.add('hidden');
+    });
+
     const soundBtn = document.getElementById('feed-sound-btn');
     soundBtn.addEventListener('click', () => {
       enableSound();
@@ -291,6 +373,13 @@ export function render(room, ctx) {
     // devices can drive the guess-the-submitter prompt (js/guessing.js).
     window.addEventListener('totc-active-clip-changed', e => {
       if (!currentCode || presenterRound === null) return;
+      // Re-check the banner the moment the feed moves, rather than waiting
+      // for the next Firestore snapshot: scrolling off a clip should drop
+      // its skip prompt immediately (renderSkipPrompt's on-screen guard),
+      // even though the round trip below hasn't landed yet.
+      const r = window.__totcCurrentRoom;
+      const rd = r?.rounds?.[r.round];
+      if (rd) renderSkipPrompt(rd, r.players, r.host, rd.activeEntryId || null);
       setActiveEntry(currentCode, presenterRound, e.detail.entryId).catch(() => {});
     });
   }
@@ -311,6 +400,8 @@ export function render(room, ctx) {
     const entry = submissions[card.dataset.entryId];
     if (entry) renderContributors(card, entry, false);
   });
+
+  renderSkipPrompt(roundData, room.players, room.host, roundData.activeEntryId || null);
 
   document.getElementById('host-presenter-controls').classList.remove('hidden');
   document.getElementById('attribution-toggle').checked = revealAttribution;

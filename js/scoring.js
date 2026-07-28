@@ -119,6 +119,42 @@ export function tallyDetectiveScores(submissions, guesses, players) {
   return results;
 }
 
+// ── Vote to skip ─────────────────────────────────────────────────────────────
+// Only non-host players vote: the host is the one running the shared screen
+// and gets the prompt instead of a ballot. So the majority is measured over
+// the guests rather than the whole room - 50% + 1 of them, i.e.
+// floor(n / 2) + 1. One guest needs that guest; two need both; three need
+// two; four need three.
+//
+// Kept pure (and derived from the room snapshot on both sides) so the guest
+// button and the host prompt independently compute the same number from the
+// same data - nothing writes a "threshold reached" flag that the other side
+// then has to trust.
+export function skipVoterIds(players, hostId) {
+  return Object.keys(players || {}).filter(id => id !== hostId);
+}
+
+export function skipThreshold(eligibleVoterCount) {
+  if (eligibleVoterCount <= 0) return 0;
+  return Math.floor(eligibleVoterCount / 2) + 1;
+}
+
+// Votes from players who have since left the room are ignored rather than
+// left holding a skip open (or pushing one over): the tally only ever counts
+// ids that are still in `players`.
+export function tallySkipVotes(roundData, entryId, players, hostId) {
+  const eligible = skipVoterIds(players, hostId);
+  const votes = roundData?.skipVotes?.[entryId] || {};
+  const voted = eligible.filter(id => votes[id]).length;
+  const threshold = skipThreshold(eligible.length);
+  return {
+    voted,
+    eligible: eligible.length,
+    threshold,
+    reached: threshold > 0 && voted >= threshold,
+  };
+}
+
 // Tallies weighted totals and produces a rank-sorted list (competition
 // ranking: ties share a rank, next rank skips accordingly). Also returns,
 // per entry, which voters contributed how many raw points - the reveal

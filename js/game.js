@@ -4,6 +4,7 @@ import { toRoman } from './format.js';
 import * as submission from './submission.js';
 import * as presenter from './presenter.js';
 import * as guessing from './guessing.js';
+import * as skipVote from './skipVote.js';
 import * as voting from './voting.js';
 import * as reveal from './reveal.js';
 
@@ -85,6 +86,7 @@ subscribeToRoom(code, room => {
     case 'compiling':
       presenter.render(room, ctx);
       guessing.render(room, ctx);
+      skipVote.render(room, ctx);
       break;
     case 'voting': voting.render(room, ctx); break;
     case 'reveal': reveal.render(room, ctx); break;

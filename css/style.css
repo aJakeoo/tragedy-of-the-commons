@@ -634,6 +634,128 @@ label {
   color: var(--color-surface);
 }
 .guess-option.selected::after { background: var(--color-surface); opacity: 0.9; }
+
+/* Vote to skip (js/skipVote.js) - the guest-side button under whatever else
+   the guest view is showing. One-way: press it once, it pops, floods red and
+   locks until the host's feed moves to another clip. The red state has to
+   beat the global button:disabled opacity rule, since "locked" here means
+   "your vote is in", not "unavailable". */
+.skip-vote {
+  max-width: 480px;
+  margin: 2.25rem auto 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border-soft);
+}
+.skip-vote-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  width: 100%;
+  max-width: 320px;
+  min-height: 48px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+}
+.skip-vote-btn:hover { border-color: var(--color-error-border); }
+.skip-vote-label { position: relative; z-index: 1; }
+.skip-vote-btn.voted,
+.skip-vote-btn.voted:disabled {
+  background: var(--color-error);
+  border-color: var(--color-error);
+  color: oklch(98% 0.015 80);
+  opacity: 1;
+  cursor: default;
+}
+/* The press: a quick squash-and-overshoot, plus a bright ripple flooding out
+   from the middle of the pill. The button itself goes red on the same tick
+   (the vote is optimistic - see skipVote.js), so the ripple is deliberately
+   a LIGHTER red than .voted's fill: on a same-colour flood it would be
+   invisible, and delaying the fill to make room for it would cost the
+   instant "that registered" feedback the press is there to give. */
+.skip-vote-btn.pop { animation: skipPop 420ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.skip-vote-ripple {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: oklch(78% 0.15 30);
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 0;
+  z-index: 0;
+}
+.skip-vote-btn.pop .skip-vote-ripple { animation: skipRipple 480ms ease-out; }
+@keyframes skipPop {
+  0% { transform: scale(1); }
+  28% { transform: scale(0.92); }
+  60% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+@keyframes skipRipple {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0.85; }
+  100% { transform: translate(-50%, -50%) scale(8); opacity: 0; }
+}
+.skip-vote-tally {
+  margin: 0.7rem 0 0;
+  font-size: 0.8rem;
+  min-height: 1.2em; /* holds its line so the button doesn't jump as the text changes */
+}
+
+/* The host's prompt once the room has voted a clip out - floats over the
+   feed (which is a fixed, full-viewport layer of its own). */
+.skip-prompt {
+  position: absolute;
+  z-index: 46;
+  left: 50%;
+  transform: translateX(-50%);
+  top: calc(1rem + env(safe-area-inset-top, 0px));
+  width: min(420px, calc(100vw - 2rem));
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-md);
+  background: oklch(22% 0.02 50 / 0.94);
+  border: 1px solid var(--color-error-border);
+  box-shadow: 0 8px 28px oklch(0% 0 0 / 0.45);
+  text-align: center;
+  animation: skipPromptIn 320ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+.skip-prompt-text {
+  margin: 0 0 0.7rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: oklch(95% 0.02 75);
+}
+.skip-prompt-actions { display: flex; gap: 0.5rem; justify-content: center; }
+.skip-prompt-actions button {
+  flex: 1;
+  min-height: 44px;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.85rem;
+  border-radius: 999px;
+}
+.skip-prompt-skip {
+  background: var(--color-error);
+  border-color: var(--color-error);
+  color: oklch(98% 0.015 80);
+}
+.skip-prompt-skip:hover { background: oklch(48% 0.19 25); }
+.skip-prompt-keep {
+  background: transparent;
+  border-color: oklch(70% 0.02 70 / 0.5);
+  color: oklch(88% 0.02 75);
+}
+.skip-prompt-keep:hover { background: oklch(100% 0 0 / 0.1); }
+@keyframes skipPromptIn {
+  from { opacity: 0; transform: translate(-50%, -14px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skip-vote-btn.pop { animation: none; }
+  .skip-vote-btn.pop .skip-vote-ripple { animation: none; }
+  .skip-prompt { animation: none; }
+}
 .mode-options { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.5rem; }
 .mode-option {
   display: flex;
