@@ -44,6 +44,14 @@
 //      clip out permanently.
 //   3. AUTOPLAY_ERROR (3002) on a muted load → fallBackToTapToPlay.
 //
+// UPLOADED clips have NONE of that problem and are not gambled on. They
+// render as a same-origin <video>, so "play this with sound" is a property
+// we set and a promise the browser answers honestly - no relayed gesture,
+// no silent revert, no wedging. startUploadPlayback below therefore always
+// asks for sound first and falls back to muted only if actually refused,
+// regardless of whether the user has opted in yet. See its own comment for
+// why that ask usually succeeds.
+//
 // Dead end, do not revisit: preloading background players as
 // unmuted-but-paused (muted=0&autoplay=0) so a snap only needs `play`.
 // Tested live - a player/v1 iframe loaded with autoplay=0 renders black,
@@ -117,9 +125,8 @@ export function enableSound() {
   if (info?.platform === 'tiktok' && info.iframe && info.loadedMuted) {
     info.soundGambleFailed = false; // an explicit tap earns a fresh try
     soundGamble(activeContainer);
-  } else if (info?.platform === 'upload' && info.videoEl) {
-    info.videoEl.muted = false;
-    info.videoEl.play().catch(() => {});
+  } else if (info?.platform === 'upload') {
+    startUploadPlayback(info);
   }
 }
 
@@ -255,6 +262,55 @@ function promotePending(container) {
 // this gesture" gamble like TikTok's Embed Player. Not autoplayed until
 // this card actually becomes the active one (startContainer below); a
 // video sitting off-screen in the feed shouldn't be pulling bandwidth.
+// Starts (or restarts) an uploaded clip WITH SOUND, falling back to muted
+// only if the browser actually refuses. No gamble machinery: a same-origin
+// <video> answers `play()` with a promise that rejects when the autoplay
+// policy blocks a sound-on start, so the outcome is known rather than
+// guessed at - the exact thing TikTok's Embed Player cannot give us.
+//
+// The ask succeeds more often than the policy might suggest, because
+// game.html is ONE document for every phase of the round: by the time the
+// compiled feed is built, the host has clicked "Close submissions &
+// compile" and most guests have clicked "Submit my clips" in that same
+// document. That's sticky user activation - precisely what the autoplay
+// policy is looking for. Where it isn't there, the muted fallback plays on
+// and the next tap anywhere reclaims sound (see ensureGestureUnmuteListener).
+function startUploadPlayback(info) {
+  const video = info?.videoEl;
+  if (!video) return;
+  video.muted = false;
+  video.play().then(() => {
+    // A resolved play() that left the element paused or re-muted is a
+    // refusal in all but name - treat it as one rather than reporting
+    // sound the viewer can't hear.
+    if (video.paused || video.muted) throw new Error('SOUND_REFUSED');
+    markSoundEnabled();
+  }).catch(() => {
+    video.muted = true;
+    video.play().catch(() => {});
+  });
+}
+
+// When the unmuted start IS refused, the next real interaction anywhere on
+// the page is a fresh grant of user activation. Spend it on sound rather
+// than making the viewer hunt for the "Tap for sound" button. Scoped hard:
+// it only ever touches an uploaded clip that is currently the active one
+// and currently muted, so it can't disturb a TikTok player mid-gamble or
+// start anything the viewer didn't expect. Capture phase, so a handler that
+// stops propagation (the guess options, the skip button) doesn't eat it.
+let gestureUnmuteBound = false;
+function ensureGestureUnmuteListener() {
+  if (gestureUnmuteBound) return;
+  gestureUnmuteBound = true;
+  const reclaimSound = () => {
+    const info = activeContainer ? cardInfo.get(activeContainer) : null;
+    if (info?.platform !== 'upload' || !info.videoEl || !info.videoEl.muted) return;
+    startUploadPlayback(info);
+  };
+  document.addEventListener('pointerdown', reclaimSound, true);
+  document.addEventListener('keydown', reclaimSound, true);
+}
+
 export function buildUploadVideo(container) {
   const info = cardInfo.get(container);
   const video = document.createElement('video');
@@ -262,9 +318,12 @@ export function buildUploadVideo(container) {
   video.className = 'presenter-video';
   video.playsInline = true;
   video.loop = true;
+  // Muted at construction only so a card sitting off-screen in the feed is
+  // silent no matter what; the active card is unmuted by startUploadPlayback.
   video.muted = true;
   video.preload = 'metadata';
   info.videoEl = video;
+  ensureGestureUnmuteListener();
   if (activeContainer === null) {
     activeContainer = container;
     emitActiveClipChanged(container);
@@ -324,19 +383,12 @@ function startContainer(container) {
   const info = cardInfo.get(container);
   if (!info) return;
 
+  // Uploaded clips always start with sound, opt-in or not - see
+  // startUploadPlayback. `soundEnabled` doesn't gate them: it exists to
+  // record that the user has cleared the sound bar for TikTok's relayed
+  // players, and an uploaded clip never needed that permission slip.
   if (info.platform === 'upload') {
-    if (!info.videoEl) return;
-    if (soundEnabled) {
-      info.videoEl.muted = false;
-      info.videoEl.play().then(markSoundEnabled).catch(() => {
-        // Autoplay-with-sound blocked for this clip specifically - fall
-        // back to muted rather than leaving it paused and silent.
-        info.videoEl.muted = true;
-        info.videoEl.play().catch(() => {});
-      });
-    } else {
-      info.videoEl.play().catch(() => {});
-    }
+    startUploadPlayback(info);
     return;
   }
 
