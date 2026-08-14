@@ -21,9 +21,15 @@
 
     <!-- Upload leads: an uploaded clip is the only kind this app can play
          back with full control (see freshSlotState in js/submission.js). -->
-    <p class="submit-lede" id="submit-lede">Upload up to three clips from your camera roll. Only have a link? Switch any slot to Link.</p>
+    <p class="submit-lede" id="submit-lede">Upload three clips from your camera roll - add more below if you've got them. Only have a link? Switch any slot to Link.</p>
 
     <div id="link-slots"></div>
+
+    <!-- Three slots is where a round starts; this grows the list one slot at
+         a time up to MAX_CLIP_SLOTS (see js/submission.js addSlot). Label is
+         rewritten per press ("Add a fourth video", "a fifth", ...) and the
+         button removes itself at the cap. -->
+    <button type="button" class="add-slot-btn" id="add-slot-btn">Add a fourth video</button>
 
     <button class="primary" id="submit-links-btn">Submit my clips</button>
     <p class="muted hidden" id="submitted-note">Submitted! You can still edit and resubmit before the host closes submissions.</p>

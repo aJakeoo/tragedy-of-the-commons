@@ -2,7 +2,8 @@ import { validateAndResolveLink } from './linkValidation.js';
 import { submitPlayerLinks, closeSubmissionsAndCompile } from './firebase.js';
 import { uploadClipVideo } from './cloudinaryUpload.js';
 import { mergeSubmissions } from './scoring.js';
-import { MAX_LINKS_PER_PLAYER, SUBMISSION_TIMER_SECONDS, MAX_UPLOAD_SIZE_MB, UPLOAD_ENABLED } from './config.js';
+import { DEFAULT_CLIP_SLOTS, MAX_CLIP_SLOTS, SUBMISSION_TIMER_SECONDS, MAX_UPLOAD_SIZE_MB, UPLOAD_ENABLED } from './config.js';
+import { ordinalWord } from './format.js';
 import { showPhaseError } from './uiError.js';
 
 let slotState = []; // [{ mode: 'link'|'upload', url, status: 'empty'|'checking'|'ok'|'bad', result, error, fileName, progress, uploadTask }]
@@ -23,8 +24,40 @@ let currentRound = null;
 // gated off (UPLOAD_ENABLED), since a slot would otherwise open on a
 // control that never renders.
 function freshSlotState() {
-  const mode = UPLOAD_ENABLED ? 'upload' : 'link';
-  return Array.from({ length: MAX_LINKS_PER_PLAYER }, () => ({ mode, url: '', status: 'empty' }));
+  return Array.from({ length: DEFAULT_CLIP_SLOTS }, emptySlot);
+}
+
+function emptySlot() {
+  return { mode: UPLOAD_ENABLED ? 'upload' : 'link', url: '', status: 'empty' };
+}
+
+// A player who wants to bring more than the round's default three says so
+// one slot at a time, up to MAX_CLIP_SLOTS. Appending rather than
+// pre-rendering ten slots keeps the screen honest about what the round
+// expects, and it's append-only on purpose: every other piece of per-slot
+// state here (in-flight upload tasks, debounce timers, the stale-response
+// guards in checkSlot/handleFileSelected) is keyed by slot INDEX, so
+// removing a middle slot would silently reassign someone else's upload.
+function addSlot() {
+  if (slotState.length >= MAX_CLIP_SLOTS) return;
+  slotState.push(emptySlot());
+  renderSlots();
+  updateSubmitEnabled();
+}
+
+function updateAddSlotButton() {
+  const btn = document.getElementById('add-slot-btn');
+  if (!btn) return;
+  const next = slotState.length + 1;
+  if (next > MAX_CLIP_SLOTS) {
+    btn.classList.add('hidden');
+    return; // leave the label alone - there's no next slot to name
+  }
+  btn.classList.remove('hidden');
+  const word = ordinalWord(next);
+  // "an eighth", not "a eighth" - the only vowel-initial word in the range,
+  // but cheaper to test for than to special-case.
+  btn.textContent = `Add ${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word} video`;
 }
 
 function cancelSlotUpload(slot) {
@@ -252,6 +285,7 @@ function renderSlots() {
     container.appendChild(div);
   });
   slotState.forEach((_, i) => renderStatus(i));
+  updateAddSlotButton();
 }
 
 // Link mode only - upload mode's status lives entirely in the upload box
@@ -406,6 +440,8 @@ export function render(room, ctx) {
     bound = true;
     slotState = freshSlotState();
     renderSlots();
+
+    document.getElementById('add-slot-btn').addEventListener('click', addSlot);
 
     document.getElementById('submit-links-btn').addEventListener('click', async () => {
       const validLinks = slotState.filter(s => s.status === 'ok').map(s => ({

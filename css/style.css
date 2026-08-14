@@ -331,6 +331,23 @@ label {
   color: var(--color-surface);
 }
 .slot-mode-hint { font-size: 0.72rem; margin: 0.45rem 0 0; }
+
+/* "Add a fourth video" - the one green control in the app, deliberately
+   distinct from the rust accent that means "the main action here" (Submit,
+   Start) and from the red that means skip/error. It sits between the slots
+   and Submit, so full-width with its own colour keeps the two from reading
+   as a pair of equal choices. Green is already the palette's "this is
+   good/extra" note - the same --color-secondary as the Upload tab's "Best"
+   flag and a validated slot's border. */
+.add-slot-btn {
+  display: block;
+  width: 100%;
+  margin-bottom: 0.9rem;
+  background: var(--color-secondary);
+  border-color: var(--color-secondary);
+  color: var(--color-surface);
+}
+.add-slot-btn:hover { background: oklch(40% 0.06 165); border-color: oklch(40% 0.06 165); }
 .submit-lede { font-size: 0.85rem; color: var(--color-text-muted); margin: 0 0 0.9rem; }
 .slot-mode-tab .icon-link { width: 10px; height: 10px; border: 2px solid currentColor; border-radius: 6px; flex-shrink: 0; }
 .slot-mode-tab .icon-upload {

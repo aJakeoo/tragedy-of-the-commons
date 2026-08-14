@@ -19,6 +19,19 @@ export function toRoman(num) {
   return result || String(num);
 }
 
+// Spelled-out ordinals, for prose that reads as a sentence rather than a
+// spec - "Add a fourth video" beats "Add a 4th video" on a button. Only
+// needs to cover the clip-slot range (see MAX_CLIP_SLOTS); anything past
+// it falls back to the numeric form below.
+const ORDINAL_WORDS = [
+  null, 'first', 'second', 'third', 'fourth', 'fifth',
+  'sixth', 'seventh', 'eighth', 'ninth', 'tenth',
+];
+
+export function ordinalWord(n) {
+  return ORDINAL_WORDS[n] || ordinal(n);
+}
+
 export function ordinal(n) {
   const suffixes = ['th', 'st', 'nd', 'rd'];
   const v = n % 100;

@@ -11,7 +11,8 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 import {
-  MAX_LINKS_PER_PLAYER,
+  DEFAULT_CLIP_SLOTS,
+  MAX_CLIP_SLOTS,
   SUBMISSION_TIMER_SECONDS,
   VOTE_POINT_BUDGET,
   MERGE_VOTE_MULTIPLIER_PER_CONTRIBUTOR,
@@ -85,7 +86,8 @@ export async function createRoom(code, hostPlayer) {
     round: 0,
     createdAt: serverTimestamp(),
     config: {
-      maxLinksPerPlayer: MAX_LINKS_PER_PLAYER,
+      clipSlots: DEFAULT_CLIP_SLOTS,
+      maxClipSlots: MAX_CLIP_SLOTS,
       submissionTimerSeconds: SUBMISSION_TIMER_SECONDS,
       votePointBudget: VOTE_POINT_BUDGET,
       mergeMultiplierPerContributor: MERGE_VOTE_MULTIPLIER_PER_CONTRIBUTOR,

@@ -48,7 +48,12 @@ export const PLAYBACK_SYNC_SEEK_COOLDOWN_MS = 3000;
 export const PLAYBACK_SYNC_STALE_SECONDS = 15;
 
 // ── Tunables ─────────────────────────────────────────────────────────────────
-export const MAX_LINKS_PER_PLAYER = 3;
+// How many clip slots a player STARTS with, not a limit - the submission
+// screen offers an "Add a fourth video" button that grows the list one slot
+// at a time up to MAX_CLIP_SLOTS. Three is what the round is balanced
+// around; anything past it is the player choosing to bring more.
+export const DEFAULT_CLIP_SLOTS = 3;
+export const MAX_CLIP_SLOTS = 10;
 export const SUBMISSION_TIMER_SECONDS = 60; // soft nudge only - never locks submission or auto-submits
 export const VOTE_POINT_BUDGET = 6; // points each player distributes across a round's entries
 export const MERGE_VOTE_MULTIPLIER_PER_CONTRIBUTOR = 1; // weighted points = raw ballot points * (contributors * this)
