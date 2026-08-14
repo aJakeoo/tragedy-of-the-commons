@@ -7,6 +7,7 @@ import {
   setPlaybackMode,
 } from './firebase.js';
 import { GAME_NAME, DEFAULT_PLAY_MODE, DEFAULT_PLAYBACK } from './config.js';
+import { describeError } from './uiError.js';
 
 const MODE_LABELS = {
   funniest: 'Vote funniest',
@@ -158,9 +159,7 @@ unsubscribe = subscribeToRoom(code, room => {
         startBtn.disabled = false;
         startBtn.textContent = 'Start game';
         const errEl = document.getElementById('lobby-error');
-        errEl.textContent = err.message === 'TIMED_OUT'
-          ? "That took too long - check your connection and try again."
-          : 'Could not start the game - try again.';
+        errEl.textContent = describeError(err, 'Could not start the game - try again.');
         errEl.classList.remove('hidden');
       }
     };

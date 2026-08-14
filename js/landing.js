@@ -1,4 +1,5 @@
 import { createRoom, joinRoom, roomExists } from './firebase.js';
+import { describeError } from './uiError.js';
 import { generateRoomCode, generatePlayerId, GAME_NAME, GAME_TAGLINE } from './config.js';
 
 document.title = GAME_NAME;
@@ -52,9 +53,7 @@ document.getElementById('create-btn').addEventListener('click', async () => {
     savePlayerSession(code, playerId, name);
     window.location.href = 'lobby.html';
   } catch (err) {
-    showError('create-error', err.message === 'TIMED_OUT'
-      ? "That took too long - check your connection and try again."
-      : err.message || 'Could not create room.');
+    showError('create-error', describeError(err, 'Could not create room - try again.'));
     btn.disabled = false;
     btn.textContent = originalLabel;
   }
@@ -77,10 +76,7 @@ document.getElementById('join-btn').addEventListener('click', async () => {
     savePlayerSession(code, playerId, name);
     window.location.href = 'lobby.html';
   } catch (err) {
-    showError('join-error', err.message === 'ROOM NOT FOUND' ? 'No room with that code.'
-      : err.message === 'GAME ALREADY IN PROGRESS' ? 'That game already started.'
-      : err.message === 'TIMED_OUT' ? "That took too long - check your connection and try again."
-      : err.message || 'Could not join room.');
+    showError('join-error', describeError(err, 'Could not join room - try again.'));
     btn.disabled = false;
     btn.textContent = originalLabel;
   }

@@ -1300,3 +1300,35 @@ Verified: both settings cards are host-only and hold their selections independen
 **Grammar bug caught in QA, and honestly it was caught twice.** The label built as `Add a ${word} video`, which gives "Add **a** eighth video". Worse, the first version of the test asserted that exact wrong string and passed - the expectation was written from the implementation instead of from the language. Fixed in both: the article is now chosen by whether the ordinal word starts with a vowel ("an eighth"), and the test asserts the correct phrasing. Also stopped recomputing the label once the cap is reached, where it briefly read "Add a 11th video" behind the `hidden` class.
 
 **QA - 10 new checks, plus both existing suites re-run green (37/37 sync, 7/7 unmute).** A round starts with exactly three slots and offers a fourth; each press adds exactly one, 4 through 10; the label counts up in words with correct articles; the button removes itself at ten keeping its last sane label; a slot with real state (switched to Link mode with text typed in) survives all seven rebuilds untouched; every added slot opens on Upload like the defaults; extra empty slots don't enable or corrupt submission; and a new round resets to three with the fourth on offer again. Zero page errors.
+
+---
+
+## Session 16 addendum 3 - "Missing or insufficient permissions." on the live site
+
+**Reported:** a screenshot from the live site (`ajakeoo.github.io`, iOS Safari) showing that message in red under Create room.
+
+**Diagnosis - this is not an app bug.** It is Firestore's `PERMISSION_DENIED`, surfaced verbatim. Confirmed against the live project by REST, independent of the app:
+
+```
+GET   .../rooms/ZZZZ   -> 403 PERMISSION_DENIED
+PATCH .../rooms/ZZZZ   -> 403 PERMISSION_DENIED
+```
+
+Even a single-document *read* of `rooms/{code}` is refused, while this repo's `firestore.rules` explicitly allows read and write there, and `firebase.json` already wires that file up correctly. So **the rules in this repo are not what the project is running**.
+
+That fits how this project actually ships: the site is on GitHub Pages, so deploying means pushing to GitHub - but Firestore rules live in the Firebase project and only change via `firebase deploy --only firestore:rules` or the console. Nothing in the repo's history or this log records that ever being run. Earlier sessions *did* do live QA against real Firestore successfully, which points at the classic cause: a database created in **test mode** starts with rules of the form `allow read, write: if request.time < timestamp.date(...)`, which expire ~30 days later and then deny everything, looking exactly like this.
+
+**The rules file itself is verified good**, so deploying it is a checked fix rather than a hopeful one. Ran `firestore.rules` in the real Firestore emulator (`firebase emulators:exec --only firestore`) against `@firebase/rules-unit-testing`, as an unauthenticated client, which is what every player is here: `createRoom`'s `setDoc`, `getDoc`, the dot-path nested writes for `joinRoom`/`setPlaybackMode`/`startRound`/`submitPlayerLinks`, `setActiveEntry` carrying the new synced-playback payload, the deep `skipVotes`/`guesses` nesting, `deleteField`, and attaching a realtime listener - all permitted; a write to a collection outside `/rooms` correctly denied. 10/10.
+
+**The fix (needs Firebase credentials, so it can't be done from here):** deploy the repo's rules -
+`firebase deploy --only firestore:rules --project tragedy-of-the-commons-4e239`
+or paste `firestore.rules` into console.firebase.google.com -> Firestore Database -> Rules -> Publish. Worth checking the existing rules for a `request.time < timestamp.date(...)` line first, purely to confirm the expiry theory.
+
+### What WAS fixed in code: raw SDK errors reaching players
+
+Regardless of the rules, "Missing or insufficient permissions." should never have been on a player's screen. `landing.js` was ending its handlers with `err.message || 'Could not create room.'`, so any SDK error text passed straight through - a developer sentence shown to a party guest, and one that tells the person running the game nothing about where to look either.
+
+- `js/uiError.js` - new `describeError(err, fallback)`. Translates `FirebaseError.code` (`permission-denied`, `unavailable`, `deadline-exceeded`, `resource-exhausted`, `unauthenticated`) and this app's own thrown sentinels (`TIMED_OUT`, `ROOM NOT FOUND`, `GAME ALREADY IN PROGRESS`) into plain sentences, falling back to a caller-supplied, screen-appropriate line rather than to `err.message`. On `permission-denied` it logs the actual remedy (the deploy command, plus the test-mode-expiry note) to the console - where whoever is debugging will look and a player never will. A message-text check backs up the `code` check in case the code doesn't survive some path.
+- `js/landing.js`, `js/lobby.js`, `showPhaseError` - all now route through it, so the four phase screens, the lobby and the landing page fail the same legible way.
+
+**QA - 5 checks against the exact live failure shape** (a `FirebaseError` with `code: 'permission-denied'` and that literal message, injected in place of `js/firebase.js`): create and join both show "Can't reach the game - its database turned the request away." with no trace of the SDK string, the deploy command is logged to the console, and the button is handed back for a retry. All three existing suites re-run green (37/37 sync, 10/10 slots, 7/7 unmute).
