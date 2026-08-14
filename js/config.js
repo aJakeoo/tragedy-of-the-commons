@@ -12,6 +12,41 @@ export const PLAY_MODE_FUNNIEST = 'funniest'; // weighted-point ballot on which 
 export const PLAY_MODE_GUESS = 'guess'; // guess-the-submitter mini-game, no ballot
 export const DEFAULT_PLAY_MODE = PLAY_MODE_FUNNIEST;
 
+// ── Playback destination ─────────────────────────────────────────────────────
+// The room's second pre-game setting, host-only and lobby-only exactly like
+// the play mode above. 'cast' is how this app has always worked: only the
+// host's client builds the compiled feed, and everyone watches THAT (a TV,
+// a laptop on the table). 'synced' instead builds the same feed on every
+// device, with the host's client acting as the conductor - it publishes
+// which clip is playing and how far into it, and every other device follows
+// (see PLAYBACK_SYNC_* below and js/embeds.js applyPlaybackSync).
+export const PLAYBACK_CAST = 'cast';
+export const PLAYBACK_SYNCED = 'synced';
+export const DEFAULT_PLAYBACK = PLAYBACK_CAST;
+
+// How often the host republishes its playback position in synced mode. Each
+// tick is one Firestore write on the room doc (which every client is already
+// listening to), so this is a "smooth enough vs chatty" trade: 2.5s keeps a
+// follower within a couple of seconds of the host without turning the room
+// document into a firehose.
+export const PLAYBACK_SYNC_INTERVAL_MS = 2500;
+
+// How far a follower may drift from the host's mark before it seeks. Kept
+// deliberately loose - a correction is a visible jump, so chasing tenths of
+// a second would be worse to watch than being slightly behind. Uploaded
+// clips are a same-origin <video> (cheap, accurate seeks) so they get the
+// tighter number; TikTok's Embed Player only reports its position on its own
+// schedule and only seeks via postMessage, so it gets more slack.
+export const PLAYBACK_SYNC_DRIFT_UPLOAD_SECONDS = 1.2;
+export const PLAYBACK_SYNC_DRIFT_TIKTOK_SECONDS = 2.5;
+export const PLAYBACK_SYNC_SEEK_COOLDOWN_MS = 3000;
+
+// A follower extrapolates forward from the host's last published mark. Past
+// this age the mark is treated as stale (host tab backgrounded, connection
+// dropped) and the follower just keeps playing rather than chasing a
+// position that stopped being true a while ago.
+export const PLAYBACK_SYNC_STALE_SECONDS = 15;
+
 // ── Tunables ─────────────────────────────────────────────────────────────────
 export const MAX_LINKS_PER_PLAYER = 3;
 export const SUBMISSION_TIMER_SECONDS = 60; // soft nudge only - never locks submission or auto-submits

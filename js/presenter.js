@@ -2,6 +2,7 @@ import { setRevealAttribution, startVoting, revealResults, setActiveEntry } from
 import { sortEntries, tallySkipVotes } from './scoring.js';
 import { showPhaseError } from './uiError.js';
 import { platformLabel } from './format.js';
+import { PLAYBACK_SYNCED, PLAYBACK_SYNC_INTERVAL_MS } from './config.js';
 import {
   buildTikTokPlayer,
   buildInstagramBlockquote,
@@ -13,16 +14,29 @@ import {
   deactivateFeed,
   enableSound,
   isSoundEnabled,
+  getPlaybackState,
+  applyPlaybackSync,
+  stopPlaybackSync,
 } from './embeds.js';
 
-let bound = false;
+let feedBound = false; // listeners every client running a feed needs
+let hostBound = false; // host-only controls (attribution, start voting, skip prompt)
 let startingVoting = false;
 let presenterRound = null;
 let renderedEntryIds = null; // sorted, joined - identifies the current feed's contents
 let feedObserver = null;
 let feedPoller = 0;
-let currentCode = null; // set on the host's client only - see the isHost guard in render()
+let currentCode = null;
+let feedIsHost = false; // whether THIS client's feed is the conducting one
 let skipDismissed = new Set(); // entryIds the host chose to keep watching - see renderSkipPrompt
+let inCompiling = false; // guards leaveCompiling() against re-running every snapshot
+
+// Synced playback (config.playback === 'synced'), host side: republishes
+// where the feed actually is so every other device can follow.
+let syncTimer = 0;
+let syncCode = null;
+let syncRound = null;
+let lastPublishedEntryId = undefined;
 
 function buildCard(entryId, entry) {
   const card = document.createElement('div');
@@ -162,6 +176,19 @@ function observeFeed(feed) {
   }, 500);
 }
 
+// Moves a FOLLOWER's feed onto the card the conductor is on. Deliberately
+// not smooth-scrolled: this isn't the viewer's own gesture, and a followed
+// jump that animates for 400ms is 400ms of the clip everyone else is
+// already watching. Activation is called directly rather than left to
+// observeFeed's detection, so a follower's audio switches on the same tick
+// as its picture instead of up to a poll interval later.
+function followFeedTo(feed, index) {
+  if (!feed.clientHeight) return; // feed not laid out yet (still hidden) - next snapshot will do it
+  const target = index * feed.clientHeight;
+  if (Math.abs(feed.scrollTop - target) > 4) feed.scrollTo({ top: target, behavior: 'auto' });
+  activateCardAt(feed, index);
+}
+
 // Advances the feed one slide, which is all "skip" means here - the feed's
 // own snap detection (observeFeed above) picks the new card up and re-syncs
 // activeEntryId/audio from there, so this deliberately doesn't call
@@ -225,10 +252,10 @@ function renderSkipPrompt(roundData, players, hostId, activeEntryId) {
 
 // The final feed slide: after the last clip, snapping down lands on the
 // "what happens next" card - the host's attribution toggle + Start voting
-// button, or the guest's waiting note. Those elements live in game.html
-// (render() below toggles them by id), so they're MOVED into this slide
+// button, or (on a follower's feed in synced playback) a waiting note. The
+// host's controls live in game.html, so they're MOVED into this slide
 // rather than cloned.
-function buildEndCard(entries) {
+function buildEndCard(entries, isHost) {
   const card = document.createElement('div');
   card.className = 'presenter-card feed-endcard';
   const inner = document.createElement('div');
@@ -244,7 +271,14 @@ function buildEndCard(entries) {
     done.textContent = "That's every clip.";
     inner.appendChild(done);
   }
-  inner.appendChild(document.getElementById('host-presenter-controls'));
+  if (isHost) {
+    inner.appendChild(document.getElementById('host-presenter-controls'));
+  } else {
+    const wait = document.createElement('p');
+    wait.className = 'feed-endcard-note';
+    wait.textContent = 'Waiting for the host to call it...';
+    inner.appendChild(wait);
+  }
   card.appendChild(inner);
   return card;
 }
@@ -252,7 +286,7 @@ function buildEndCard(entries) {
 // Rebuilds the whole feed - only called when the actual set of entries for
 // this round changes, not on every snapshot (e.g. toggling attribution
 // shouldn't reload every embed and reset any playback in progress).
-function renderGrid(entries) {
+function renderGrid(entries, isHost) {
   const feed = document.getElementById('presenter-grid');
   // The host controls live inside the end card between renders - park
   // them back on the section before wiping the feed so innerHTML=''
@@ -277,13 +311,69 @@ function renderGrid(entries) {
   for (const [entryId, entry] of entries) {
     feed.appendChild(buildCard(entryId, entry));
   }
-  feed.appendChild(buildEndCard(entries));
+  feed.appendChild(buildEndCard(entries, isHost));
   observeFeed(feed);
 
   // TikTok clips render as self-contained Embed Player iframes (see
   // embeds.js) - no loader script needed. One process() call still picks up
   // every Instagram blockquote in the feed.
   processInstagramEmbeds();
+}
+
+// ── Conducting synced playback ───────────────────────────────────────────────
+// Only ever runs on the host's client, and only in synced playback: reads
+// where the feed actually is (embeds.js getPlaybackState) and publishes it,
+// alongside activeEntryId, in one write.
+function publishPlayback(entryId) {
+  if (!syncCode || syncRound === null) return;
+  const state = getPlaybackState();
+  const id = entryId === undefined ? state.entryId : entryId;
+  // Nothing playing and nothing was playing last time either (the host is
+  // parked on the end card): the followers already know, so don't spend a
+  // write every 2.5s restating it.
+  if (id === null && lastPublishedEntryId === null) return;
+  lastPublishedEntryId = id;
+  setActiveEntry(syncCode, syncRound, id, {
+    entryId: id,
+    position: state.entryId === id ? state.position ?? null : null,
+    playing: !!state.playing,
+    // The follower's freshness check, not a clock: it only ever gets
+    // compared with the previous mark's seq for equality, never with a
+    // reader's own clock (see applyPlaybackSync).
+    seq: Date.now(),
+  }).catch(() => {});
+}
+
+function startConducting(code, round) {
+  if (syncTimer && syncCode === code && syncRound === round) return;
+  stopConducting();
+  syncCode = code;
+  syncRound = round;
+  lastPublishedEntryId = undefined;
+  syncTimer = setInterval(() => publishPlayback(undefined), PLAYBACK_SYNC_INTERVAL_MS);
+  publishPlayback(undefined);
+}
+
+function stopConducting() {
+  clearInterval(syncTimer);
+  syncTimer = 0;
+  syncCode = null;
+  syncRound = null;
+  lastPublishedEntryId = undefined;
+}
+
+// Called from game.js whenever the room is in any phase other than
+// compiling. The feed is a fixed, full-viewport layer inside
+// #phase-compiling, and hiding a section does NOT stop the media inside it -
+// a TikTok iframe or an uploaded <video> keeps right on playing (and, with
+// synced playback, on every device in the room at once). So leaving the
+// phase explicitly silences the feed and drops both ends of the sync.
+export function leaveCompiling() {
+  if (!inCompiling) return;
+  inCompiling = false;
+  stopConducting();
+  stopPlaybackSync();
+  deactivateFeed();
 }
 
 export function render(room, ctx) {
@@ -293,16 +383,46 @@ export function render(room, ctx) {
   // Random compile-time order (see mergeSubmissions), NOT submitter order.
   const entries = sortEntries(Object.entries(submissions)); // [entryId, entry][]
   const revealAttribution = !!roundData.revealAttribution;
+  const activeEntryId = roundData.activeEntryId || null;
 
-  // The compiled feed is host-only: the host is the one casting to the
-  // shared screen, and everyone else watches THAT, not their own phone.
-  // Guests get a lightweight "eyes on the big screen" view and never load
-  // a single platform iframe - which also keeps their devices quiet and
-  // cheap during the round.
-  document.getElementById('presenter-feed-wrap').classList.toggle('hidden', !ctx.isHost);
-  document.getElementById('guest-compiling-view').classList.toggle('hidden', ctx.isHost);
-  if (!ctx.isHost) return;
+  // Two playback destinations, set by the host before the game started (see
+  // PLAYBACK_* in config.js):
+  //   cast   - the compiled feed is HOST-ONLY. The host casts it to a shared
+  //            screen and everyone watches that, not their own phone. Guests
+  //            get a lightweight "eyes on the big screen" view and never
+  //            load a single platform iframe, which keeps their devices
+  //            quiet and cheap during the round.
+  //   synced - every device builds the same feed, and the host's client
+  //            conducts: it publishes which clip is playing and how far in,
+  //            and every follower moves its own feed to match (followFeedTo
+  //            here, applyPlaybackSync in embeds.js). Nobody but the host
+  //            can steer - a follower's feed is scroll-locked, because the
+  //            whole point of the mode is that the room stays together.
+  const synced = ctx.playback === PLAYBACK_SYNCED;
+  const showFeed = ctx.isHost || synced;
+  inCompiling = true;
   currentCode = ctx.code;
+  feedIsHost = ctx.isHost;
+
+  const feedWrap = document.getElementById('presenter-feed-wrap');
+  const guestView = document.getElementById('guest-compiling-view');
+  feedWrap.classList.toggle('hidden', !showFeed);
+  document.getElementById('sync-badge').classList.toggle('hidden', !(synced && !ctx.isHost));
+  // The guest panel (guess prompt + vote to skip) is a guest's whole screen
+  // in cast mode; in synced mode it becomes a strip over the bottom of the
+  // feed they're now watching too, and folds away entirely between clips.
+  guestView.classList.toggle('synced-overlay', synced && !ctx.isHost);
+  feedWrap.classList.toggle('has-guest-panel', synced && !ctx.isHost);
+  guestView.classList.toggle(
+    'hidden',
+    ctx.isHost || (synced && !submissions[activeEntryId])
+  );
+
+  if (!showFeed) {
+    stopConducting();
+    stopPlaybackSync();
+    return;
+  }
 
   // Guess mode has no ballot phase - the feed's end card goes straight to
   // reveal instead of collecting votes first.
@@ -317,8 +437,84 @@ export function render(room, ctx) {
     startBtn.textContent = startBtnLabel;
   }
 
-  if (!bound) {
-    bound = true;
+  // Listeners any client running a feed needs - in synced playback that's
+  // followers too, not just the host.
+  if (!feedBound) {
+    feedBound = true;
+    const soundBtn = document.getElementById('feed-sound-btn');
+    soundBtn.addEventListener('click', () => {
+      enableSound();
+      soundBtn.classList.add('hidden');
+    });
+    // Fires when sound gets enabled some other way (e.g. the user tapped a
+    // player's own speaker icon) - the button is then redundant.
+    window.addEventListener('totc-sound-enabled', () => {
+      soundBtn.classList.add('hidden');
+    });
+    // Syncs "whichever clip the feed is snapped to" to Firestore so guests'
+    // devices can drive the guess-the-submitter prompt (js/guessing.js), the
+    // skip tally, and - in synced playback - their own copy of the feed.
+    // Guarded on feedIsHost: a follower's feed moves BECAUSE of this field,
+    // so letting it write back would put the room in a loop chasing itself.
+    window.addEventListener('totc-active-clip-changed', e => {
+      if (!feedIsHost || !currentCode || presenterRound === null) return;
+      // Re-check the banner the moment the feed moves, rather than waiting
+      // for the next Firestore snapshot: scrolling off a clip should drop
+      // its skip prompt immediately (renderSkipPrompt's on-screen guard),
+      // even though the round trip below hasn't landed yet.
+      const r = window.__totcCurrentRoom;
+      const rd = r?.rounds?.[r.round];
+      if (rd) renderSkipPrompt(rd, r.players, r.host, rd.activeEntryId || null);
+      // In synced playback this same write also carries the new clip's
+      // position, so followers move and seek off one snapshot.
+      if (syncTimer) publishPlayback(e.detail.entryId ?? null);
+      else setActiveEntry(currentCode, presenterRound, e.detail.entryId).catch(() => {});
+    });
+  }
+
+  const entryIdsKey = entries.map(([id]) => id).sort().join(',');
+  if (entryIdsKey !== renderedEntryIds) {
+    renderedEntryIds = entryIdsKey;
+    renderGrid(entries, ctx.isHost);
+  }
+
+  // Attribution is unconditionally hidden on the feed itself, regardless of
+  // the toggle below: the feed IS what everyone in the room is watching -
+  // whether that's one cast screen or every device at once - so a name
+  // rendering here breaks the guessing mechanic for the whole room.
+  // `revealAttribution`/the toggle stay wired up (write still happens) in
+  // case a future, non-feed view wants to read it, but as of this session
+  // nothing else consumes it - see output.md Session 10.
+  document.querySelectorAll('#presenter-grid .presenter-card').forEach(card => {
+    const entry = submissions[card.dataset.entryId];
+    if (entry) renderContributors(card, entry, false);
+  });
+
+  const feed = document.getElementById('presenter-grid');
+
+  // ── Follower (synced playback, non-host) ───────────────────────────────────
+  // Everything below this point is the conductor's job.
+  if (!ctx.isHost) {
+    feed.classList.add('following');
+    const ids = entries.map(([id]) => id);
+    // With no clip named yet, sit tight on the first card rather than
+    // guessing - the host's first mark lands within a snapshot or two. Once
+    // the host HAS published and the clip is null, they've reached the end
+    // card, so followers go there too.
+    const index = activeEntryId
+      ? ids.indexOf(activeEntryId)
+      : (roundData.playback ? ids.length : -1);
+    if (index >= 0) followFeedTo(feed, index);
+    applyPlaybackSync(roundData.playback || null);
+    return;
+  }
+
+  feed.classList.remove('following');
+  if (synced) startConducting(ctx.code, round);
+  else stopConducting();
+
+  if (!hostBound) {
+    hostBound = true;
     document.getElementById('attribution-toggle').addEventListener('change', e => {
       const r = window.__totcCurrentRoom;
       setRevealAttribution(ctx.code, r.round, e.target.checked);
@@ -358,50 +554,9 @@ export function render(room, ctx) {
       if (activeId) skipDismissed.add(activeId);
       document.getElementById('skip-prompt').classList.add('hidden');
     });
-
-    const soundBtn = document.getElementById('feed-sound-btn');
-    soundBtn.addEventListener('click', () => {
-      enableSound();
-      soundBtn.classList.add('hidden');
-    });
-    // Fires when sound gets enabled some other way (e.g. the user tapped a
-    // player's own speaker icon) - the button is then redundant.
-    window.addEventListener('totc-sound-enabled', () => {
-      soundBtn.classList.add('hidden');
-    });
-    // Syncs "whichever clip the feed is snapped to" to Firestore so guests'
-    // devices can drive the guess-the-submitter prompt (js/guessing.js).
-    window.addEventListener('totc-active-clip-changed', e => {
-      if (!currentCode || presenterRound === null) return;
-      // Re-check the banner the moment the feed moves, rather than waiting
-      // for the next Firestore snapshot: scrolling off a clip should drop
-      // its skip prompt immediately (renderSkipPrompt's on-screen guard),
-      // even though the round trip below hasn't landed yet.
-      const r = window.__totcCurrentRoom;
-      const rd = r?.rounds?.[r.round];
-      if (rd) renderSkipPrompt(rd, r.players, r.host, rd.activeEntryId || null);
-      setActiveEntry(currentCode, presenterRound, e.detail.entryId).catch(() => {});
-    });
   }
 
-  const entryIdsKey = entries.map(([id]) => id).sort().join(',');
-  if (entryIdsKey !== renderedEntryIds) {
-    renderedEntryIds = entryIdsKey;
-    renderGrid(entries);
-  }
-
-  // Attribution is unconditionally hidden on the feed itself, regardless of
-  // the toggle below: the feed IS the shared screen everyone in the room is
-  // watching, so a name rendering here breaks the guessing mechanic for the
-  // whole room at once. `revealAttribution`/the toggle stay wired up (write
-  // still happens) in case a future, non-feed view wants to read it, but as
-  // of this session nothing else consumes it - see output.md Session 10.
-  document.querySelectorAll('#presenter-grid .presenter-card').forEach(card => {
-    const entry = submissions[card.dataset.entryId];
-    if (entry) renderContributors(card, entry, false);
-  });
-
-  renderSkipPrompt(roundData, room.players, room.host, roundData.activeEntryId || null);
+  renderSkipPrompt(roundData, room.players, room.host, activeEntryId);
 
   document.getElementById('host-presenter-controls').classList.remove('hidden');
   document.getElementById('attribution-toggle').checked = revealAttribution;

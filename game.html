@@ -19,9 +19,13 @@
     <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill"></div></div>
     <p class="muted" id="timer-label"></p>
 
+    <!-- Upload leads: an uploaded clip is the only kind this app can play
+         back with full control (see freshSlotState in js/submission.js). -->
+    <p class="submit-lede" id="submit-lede">Upload up to three clips from your camera roll. Only have a link? Switch any slot to Link.</p>
+
     <div id="link-slots"></div>
 
-    <button class="primary" id="submit-links-btn">Submit my links</button>
+    <button class="primary" id="submit-links-btn">Submit my clips</button>
     <p class="muted hidden" id="submitted-note">Submitted! You can still edit and resubmit before the host closes submissions.</p>
 
     <div class="card">
@@ -41,6 +45,12 @@
       <div id="presenter-grid" class="presenter-feed"></div>
       <button id="feed-sound-btn" class="feed-sound-btn hidden">Tap for sound</button>
 
+      <!-- Synced playback only (config.playback === 'synced'), and only on a
+           following device: the feed here is driven by the host's, not by
+           this viewer's swipes, so say so rather than leaving it feeling
+           broken when it won't scroll. -->
+      <p id="sync-badge" class="sync-badge hidden">In sync with the room</p>
+
       <!-- Shown once enough guests have voted to skip the current clip
            (js/presenter.js renderSkipPrompt). A prompt, not an auto-skip -
            the host casting the screen keeps the call. Sits outside
@@ -54,9 +64,12 @@
       </div>
     </div>
 
-    <!-- Guests don't get the feed - the host casts it to the shared screen.
-         Instead they get the guess-the-submitter prompt (js/guessing.js),
-         synced to whichever clip is active via rounds.{round}.activeEntryId. -->
+    <!-- The guest panel. In cast playback (the default) guests don't get the
+         feed at all - the host casts it to the shared screen - so this is
+         their whole screen: the guess-the-submitter prompt (js/guessing.js),
+         keyed to whichever clip is active via rounds.{round}.activeEntryId.
+         In synced playback guests DO get the feed, and presenter.js adds
+         .synced-overlay so this becomes a strip along the bottom of it. -->
     <div id="guest-compiling-view" class="guest-compiling hidden">
       <div id="guess-placeholder">
         <h2>Eyes on the big screen</h2>

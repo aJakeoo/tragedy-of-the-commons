@@ -62,6 +62,13 @@
 // own player/v1 iframes are plain URLs we control, so replacing them
 // outright (reloadPlayer below) is safe.
 
+import {
+  PLAYBACK_SYNC_DRIFT_UPLOAD_SECONDS,
+  PLAYBACK_SYNC_DRIFT_TIKTOK_SECONDS,
+  PLAYBACK_SYNC_SEEK_COOLDOWN_MS,
+  PLAYBACK_SYNC_STALE_SECONDS,
+} from './config.js';
+
 const TIKTOK_PLAYER_ORIGIN = 'https://www.tiktok.com';
 
 const cardInfo = new Map(); // embedContainer -> per-clip state, see registerEmbedCard
@@ -365,6 +372,123 @@ export function deactivateFeed() {
   activeContainer = null;
   emitActiveClipChanged(null);
   for (const c of cardInfo.keys()) stopContainer(c);
+}
+
+// ── Synced playback (config.playback === 'synced') ───────────────────────────
+// One client - the host - is the conductor: getPlaybackState() reads where
+// its active clip actually is, presenter.js publishes that to Firestore on a
+// timer, and every other device feeds the result back in through
+// applyPlaybackSync() and nudges its own copy of the same clip into line.
+//
+// Followers deliberately never compare wall clocks. Two phones' Date.now()
+// can disagree by seconds with nobody at fault, which would bake a constant
+// error into every correction. Instead a follower stamps each mark with its
+// OWN monotonic clock on arrival (performance.now()) and extrapolates from
+// there, so the only error left is one-way network latency - a few hundred
+// milliseconds, well under the drift thresholds below.
+//
+// Per-platform reality, unchanged from everything above: an uploaded clip is
+// a same-origin <video> we can read and seek precisely. A TikTok clip only
+// reports its position when its player feels like emitting onCurrentTime,
+// and only seeks by postMessage, so it syncs loosely. An Instagram
+// blockquote exposes neither - synced rooms still move everyone onto the
+// same Instagram clip at the same time, but where they are inside it is
+// each viewer's own business. This is the reason the settings copy points
+// at uploads.
+
+let remoteMark = null; // { entryId, position, playing, seq, receivedAt }
+let syncTicker = 0;
+let lastSeekAt = 0;
+
+// The conductor's answer to "what is playing, and where are we in it".
+// position is null for a clip whose player won't tell us (Instagram) - the
+// entry id still syncs, the offset just can't.
+export function getPlaybackState() {
+  const info = activeContainer ? cardInfo.get(activeContainer) : null;
+  if (!info) return { entryId: null, position: null, playing: false };
+  if (info.platform === 'upload') {
+    return {
+      entryId: info.entryId ?? null,
+      position: info.videoEl?.currentTime ?? 0,
+      playing: !!info.videoEl && !info.videoEl.paused,
+    };
+  }
+  if (info.platform === 'tiktok' && !info.fellBack) {
+    return {
+      entryId: info.entryId ?? null,
+      position: info.currentTime || 0,
+      playing: info.lastState === 1,
+    };
+  }
+  return { entryId: info.entryId ?? null, position: null, playing: false };
+}
+
+// Called by a follower on every room snapshot with whatever the host last
+// published (or null when there's nothing to follow).
+export function applyPlaybackSync(mark) {
+  if (!mark || !mark.entryId) {
+    remoteMark = null;
+    return;
+  }
+  // Re-anchor only on a genuinely new mark. The same mark arrives repeatedly
+  // - any other field on the room document changing re-fires every client's
+  // listener - and re-stamping receivedAt each time would freeze the
+  // extrapolation clock at an increasingly old position.
+  if (remoteMark && remoteMark.seq === mark.seq && remoteMark.entryId === mark.entryId) return;
+  remoteMark = { ...mark, receivedAt: performance.now() };
+  if (!syncTicker) syncTicker = setInterval(correctDrift, 1000);
+  correctDrift();
+}
+
+// Called when the compiled feed goes away (phase change, see
+// presenter.leaveCompiling) so a stale mark can't drive seeks into a feed
+// nobody is watching any more.
+export function stopPlaybackSync() {
+  clearInterval(syncTicker);
+  syncTicker = 0;
+  remoteMark = null;
+  lastSeekAt = 0;
+}
+
+function correctDrift() {
+  if (!remoteMark || remoteMark.position == null) return;
+  const age = (performance.now() - remoteMark.receivedAt) / 1000;
+  if (age > PLAYBACK_SYNC_STALE_SECONDS) return; // conductor went quiet - stop chasing it
+  const info = activeContainer ? cardInfo.get(activeContainer) : null;
+  // Not on the host's clip yet: presenter.js is what moves the feed, and it
+  // works off the same snapshot, so this just waits for the next tick.
+  if (!info || info.entryId !== remoteMark.entryId) return;
+  const target = remoteMark.position + age;
+
+  if (info.platform === 'upload') {
+    const video = info.videoEl;
+    if (!video || video.readyState < 1) return; // no metadata yet - nothing to seek against
+    if (video.paused) video.play().catch(() => {});
+    // Past the end of the clip means the extrapolation has run over a loop
+    // boundary the host has already crossed (or is about to). Seeking to a
+    // clamped end would just stutter - the host's next mark, which will read
+    // near zero again, re-syncs both sides cleanly. Only checkable when the
+    // browser actually reports a duration: a file with no duration in its
+    // metadata (some in-browser-recorded WebM, live-ish sources) reports
+    // Infinity, and gating the whole correction on a finite duration would
+    // silently mean such a clip never syncs at all.
+    if (Number.isFinite(video.duration) && target > video.duration) return;
+    if (Math.abs(video.currentTime - target) > PLAYBACK_SYNC_DRIFT_UPLOAD_SECONDS) {
+      video.currentTime = target;
+    }
+    return;
+  }
+
+  if (info.platform === 'tiktok' && info.ready && info.iframe && !info.fellBack) {
+    // A seek costs a reload-ish stutter in the Embed Player, and its own
+    // position reports lag, so a correction that fired every tick would
+    // re-trigger itself off its own stale reading.
+    if (performance.now() - lastSeekAt < PLAYBACK_SYNC_SEEK_COOLDOWN_MS) return;
+    if (Math.abs((info.currentTime || 0) - target) <= PLAYBACK_SYNC_DRIFT_TIKTOK_SECONDS) return;
+    lastSeekAt = performance.now();
+    postToPlayer(info.iframe, 'seekTo', Math.max(0, target));
+    info.currentTime = target; // assume it took, until onCurrentTime says otherwise
+  }
 }
 
 function ensureFocusListener() {

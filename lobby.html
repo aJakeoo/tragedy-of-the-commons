@@ -42,6 +42,22 @@
     </div>
   </div>
 
+  <!-- Where the compiled reel actually plays. Host-only and lobby-only, same
+       as the play mode above - see PLAYBACK_* in js/config.js. -->
+  <div id="playback-controls" class="card hidden">
+    <h2>Where it plays</h2>
+    <div class="mode-options">
+      <button type="button" class="mode-option" id="playback-cast" data-playback="cast">
+        <strong>Cast to the TV</strong>
+        <span class="muted">The reel plays on your screen only - everyone watches that and uses their phone to guess, vote and skip.</span>
+      </button>
+      <button type="button" class="mode-option" id="playback-synced" data-playback="synced">
+        <strong>Everyone's own device, in sync</strong>
+        <span class="muted">The same reel plays on every phone, kept in step with yours. You still drive - swipe to move the room on. Best with uploaded clips.</span>
+      </button>
+    </div>
+  </div>
+
   <div id="host-controls" class="card hidden">
     <button class="primary" id="start-btn">Start game</button>
     <p class="muted" id="start-hint"></p>
@@ -50,6 +66,7 @@
   <div id="guest-controls" class="card hidden">
     <p class="muted">Waiting for the host to start the game&hellip;</p>
     <p class="muted" id="guest-mode-label"></p>
+    <p class="muted" id="guest-playback-label"></p>
   </div>
 
   <p class="error hidden" id="lobby-error"></p>

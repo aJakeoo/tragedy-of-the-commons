@@ -319,6 +319,19 @@ label {
   cursor: pointer;
 }
 .slot-mode-tab.selected { background: var(--color-accent); color: var(--color-surface); }
+/* "Best" marker on the Upload tab - upload is the preferred route, so it
+   reads as a recommendation whether or not the tab is currently selected. */
+.slot-mode-flag {
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--color-secondary);
+  color: var(--color-surface);
+}
+.slot-mode-hint { font-size: 0.72rem; margin: 0.45rem 0 0; }
+.submit-lede { font-size: 0.85rem; color: var(--color-text-muted); margin: 0 0 0.9rem; }
 .slot-mode-tab .icon-link { width: 10px; height: 10px; border: 2px solid currentColor; border-radius: 6px; flex-shrink: 0; }
 .slot-mode-tab .icon-upload {
   width: 0; height: 0; flex-shrink: 0;
@@ -465,6 +478,18 @@ label {
   scrollbar-width: none;
 }
 .presenter-feed::-webkit-scrollbar { display: none; }
+/* Synced playback, following device: the feed is driven by the host's
+   position, so this viewer's own swipes must not move it - two people
+   steering is exactly the thing the mode exists to prevent. Scrolling is
+   turned off for the user, not for the code: presenter.js still positions
+   this element programmatically (scrollTop is settable on an
+   overflow:hidden box), and snapping is dropped so those jumps land
+   exactly where they're put. */
+.presenter-feed.following {
+  overflow: hidden;
+  scroll-snap-type: none;
+  touch-action: none;
+}
 .presenter-feed .feed-empty {
   color: oklch(80% 0.02 70);
   text-align: center;
@@ -556,6 +581,39 @@ label {
   box-shadow: 0 4px 18px oklch(0% 0 0 / 0.35);
 }
 .feed-sound-btn:hover { background: oklch(98% 0.015 80); }
+/* With the guest panel overlaying the bottom of the feed (synced playback),
+   the sound button moves to the top rather than sitting under the guess
+   options - clear of the badge row, not level with it. The skip prompt that
+   normally lives up here is host-only, so there's nothing else to collide
+   with on the device that gets this treatment. */
+.presenter-feed-wrap.has-guest-panel .feed-sound-btn {
+  bottom: auto;
+  top: calc(3rem + env(safe-area-inset-top, 0px));
+}
+/* The caption sits exactly where the guest panel now does. The host's screen
+   still carries it, and in guess mode it says nothing but "hidden" anyway -
+   so on a following device the panel wins that space outright rather than
+   the two printing over each other. */
+.presenter-feed-wrap.has-guest-panel .feed-caption { display: none; }
+
+/* Synced playback, following device - names why the feed won't respond to
+   swiping. Sits opposite the platform badge. */
+.sync-badge {
+  position: absolute;
+  top: 0.8rem;
+  right: 1rem;
+  z-index: 46;
+  margin: 0;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: oklch(94% 0.02 75);
+  background: oklch(22% 0.02 50 / 0.75);
+  pointer-events: none;
+}
 
 /* The feed's final slide - round wrap-up with the Start-voting controls
    (host) or waiting note (guest), centered on the dark stage. */
@@ -570,6 +628,13 @@ label {
 }
 .feed-endcard .card { background: var(--color-card); }
 .feed-endcard .feed-empty { padding: 0 0 1rem; }
+/* Stands in for the host controls on a following device's end card. */
+.feed-endcard-note {
+  text-align: center;
+  color: oklch(80% 0.02 70);
+  font-size: 0.9rem;
+  margin: 0;
+}
 .contributor-tag, .weight-badge {
   display: inline-block;
   border-radius: 999px;
@@ -593,6 +658,45 @@ label {
   text-align: center;
   padding: 4rem 1.5rem;
 }
+
+/* Synced playback: the same panel, but now over the bottom of a feed this
+   guest is watching on their own device rather than filling an otherwise
+   empty page. Everything shrinks and the stage goes dark to match the feed
+   underneath; the gradient keeps the clip readable right up to the panel
+   instead of ending at a hard edge. It floats above the feed layer (z 40)
+   but below the host's skip prompt's band, and only ever renders on a
+   device that has no skip prompt of its own. */
+.guest-compiling.synced-overlay {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 47;
+  padding: 2.5rem 1rem calc(0.9rem + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(
+    to top,
+    oklch(16% 0.015 50 / 0.97) 0%,
+    oklch(16% 0.015 50 / 0.85) 60%,
+    oklch(16% 0.015 50 / 0) 100%
+  );
+  max-height: 60dvh;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.synced-overlay::-webkit-scrollbar { display: none; }
+.synced-overlay .guess-prompt {
+  font-size: 1rem;
+  margin-bottom: 0.7rem;
+  color: oklch(95% 0.02 75);
+}
+.synced-overlay .guess-own-note { font-size: 0.95rem; color: oklch(88% 0.06 75); }
+.synced-overlay .skip-vote {
+  margin: 0.9rem auto 0;
+  padding-top: 0.9rem;
+  border-top-color: oklch(100% 0 0 / 0.15);
+}
+.synced-overlay .skip-vote-btn { min-height: 44px; }
+.synced-overlay .skip-vote-tally { color: oklch(82% 0.02 70); }
 .guess-panel { max-width: 480px; margin: 0 auto; }
 .guess-prompt {
   font-family: var(--font-display);

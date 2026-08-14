@@ -1,5 +1,5 @@
 import { subscribeToRoom } from './firebase.js';
-import { GAME_NAME, DEFAULT_PLAY_MODE } from './config.js';
+import { GAME_NAME, DEFAULT_PLAY_MODE, DEFAULT_PLAYBACK } from './config.js';
 import { toRoman } from './format.js';
 import * as submission from './submission.js';
 import * as presenter from './presenter.js';
@@ -77,9 +77,15 @@ subscribeToRoom(code, room => {
     playerName,
     isHost: room.players?.[playerId]?.isHost === true,
     mode: room.config?.mode || DEFAULT_PLAY_MODE,
+    playback: room.config?.playback || DEFAULT_PLAYBACK,
   };
 
   showPhase(room.status);
+
+  // Hiding #phase-compiling does not stop the media inside it - the compiled
+  // feed keeps playing (and, in synced playback, keeps publishing) unless it
+  // is told to stop. Leaving the phase is the one place that knows to.
+  if (room.status !== 'compiling') presenter.leaveCompiling();
 
   switch (room.status) {
     case 'submitting': submission.render(room, ctx); break;

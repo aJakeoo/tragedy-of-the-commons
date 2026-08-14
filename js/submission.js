@@ -12,8 +12,19 @@ let bound = false;
 let currentCode = null;
 let currentRound = null;
 
+// Upload is the primary, preferred submission route - every slot opens on
+// it, and pasting a link is the fallback for a clip you can't easily get
+// onto the device. That's a playback decision, not a taste one: an uploaded
+// clip becomes a same-origin <video> this app fully controls (reliable
+// autoplay, real sound, and the only thing that can be seeked accurately
+// enough for synced playback), while a platform link is at the mercy of
+// TikTok's Embed Player or Instagram's uncontrollable blockquote - see the
+// header comment in js/embeds.js. Falls back to link mode if uploads are
+// gated off (UPLOAD_ENABLED), since a slot would otherwise open on a
+// control that never renders.
 function freshSlotState() {
-  return Array.from({ length: MAX_LINKS_PER_PLAYER }, () => ({ mode: 'link', url: '', status: 'empty' }));
+  const mode = UPLOAD_ENABLED ? 'upload' : 'link';
+  return Array.from({ length: MAX_LINKS_PER_PLAYER }, () => ({ mode, url: '', status: 'empty' }));
 }
 
 function cancelSlotUpload(slot) {
@@ -193,25 +204,40 @@ function renderSlots() {
 
     // Gated off for now - see UPLOAD_ENABLED in config.js. The toggle only
     // renders (and a slot can only ever be in 'upload' mode) once uploads
-    // have somewhere to land.
+    // have somewhere to land. Upload leads the pair: it's the default and
+    // the recommended route (see freshSlotState), and the tab order should
+    // say so before the player has to read anything.
     if (UPLOAD_ENABLED) {
       const toggle = document.createElement('div');
       toggle.className = 'slot-mode-toggle';
+      const uploadTab = document.createElement('button');
+      uploadTab.type = 'button';
+      uploadTab.className = 'slot-mode-tab' + (slot.mode === 'upload' ? ' selected' : '');
+      const uploadFlag = document.createElement('span');
+      uploadFlag.className = 'slot-mode-flag';
+      uploadFlag.textContent = 'Best';
+      uploadTab.append(iconBar('icon-upload'), document.createTextNode('Upload'), uploadFlag);
+      uploadTab.addEventListener('click', () => setSlotMode(i, 'upload'));
       const linkTab = document.createElement('button');
       linkTab.type = 'button';
       linkTab.className = 'slot-mode-tab' + (slot.mode === 'upload' ? '' : ' selected');
       linkTab.append(iconBar('icon-link'), document.createTextNode('Link'));
       linkTab.addEventListener('click', () => setSlotMode(i, 'link'));
-      const uploadTab = document.createElement('button');
-      uploadTab.type = 'button';
-      uploadTab.className = 'slot-mode-tab' + (slot.mode === 'upload' ? ' selected' : '');
-      uploadTab.append(iconBar('icon-upload'), document.createTextNode('Upload'));
-      uploadTab.addEventListener('click', () => setSlotMode(i, 'upload'));
-      toggle.append(linkTab, uploadTab);
+      toggle.append(uploadTab, linkTab);
       div.appendChild(toggle);
     }
 
     div.appendChild(slot.mode === 'upload' ? buildUploadControl(i, slot) : buildLinkInput(i, slot));
+
+    // Only in link mode, and only when uploading is actually available as
+    // the alternative: a standing nudge back toward the preferred route,
+    // with the reason attached rather than just an assertion.
+    if (slot.mode !== 'upload' && UPLOAD_ENABLED) {
+      const hint = document.createElement('p');
+      hint.className = 'slot-mode-hint muted';
+      hint.textContent = 'Uploaded clips play back best - links depend on the platform’s own player.';
+      div.appendChild(hint);
+    }
 
     // The upload box carries its own status treatment (icon/heading/
     // subtitle per state) - the separate status line below is only needed

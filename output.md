@@ -1202,3 +1202,59 @@ on all eight touched JS files.
 - Zero console messages (errors or otherwise) on host and guest tabs across full reloads of the compiling phase. `node --check` clean on all five touched JS files.
 
 **Harness limitations, not code issues (both previously documented):** `document.hidden` is `true` in every automated tab here, which is why smooth scroll never ran and why media playback still can't be visually confirmed (Sessions 10 and 13). And real click delivery proved intermittent - the guest press and the guess-mode press were verified with genuine clicks, but two real clicks on the host's "Skip it" button after a reload didn't register at all despite `elementFromPoint` confirming the button was the hit target, so that path was additionally exercised via a dispatched click. Real-device testing remains the meaningful next check, as it has been since Session 8.
+
+---
+
+## Session 16 - Synced playback on every device, and upload promoted to the primary submission route
+
+**User request:** two things. (1) A pre-game setting, host-only, where instead of the compiled reel being cast to the TV it plays on everyone's individual device *in sync with each other*. (2) Upload should be the primary and preferred submission option.
+
+### 1. Where it plays - `config.playback`
+
+A second settings card in the lobby (`#playback-controls`), same host-only/lobby-only lifecycle as Session 11's play mode, writing `config.playback`:
+
+- **`cast`** (default, unchanged behaviour) - the compiled feed is host-only. Guests never load a platform iframe; they get the "eyes on the big screen" view with the guess prompt and skip button.
+- **`synced`** - every device builds the same feed, and the host's client **conducts**: it publishes which clip is playing and how far into it, and every other device moves its own feed to match.
+
+**The two settings share a CSS class (`.mode-option`) and Session 11's binding code queried it unscoped**, so adding a second card would have let a play-mode pick clear the playback pick and vice versa. Both are now bound and selected through `bindSettingPicker`/`selectSetting`, scoped to their own container.
+
+**How sync actually works.** The conductor publishes `rounds.{round}.playback = { entryId, position, playing, seq }` every 2.5s (`PLAYBACK_SYNC_INTERVAL_MS`), **in the same write as `activeEntryId`**. That last part is deliberate: the two fields describe the same fact, and separate writes could land out of order and leave a follower's guess prompt naming a different clip than its feed is showing. Cast mode writes `activeEntryId` alone exactly as before - `playback` is never written, so nothing about that path changed. The heartbeat also stops writing once the host parks on the end card (`entryId` null twice running), rather than spending a write every 2.5s restating it.
+
+**Followers never compare wall clocks.** Two phones' `Date.now()` can disagree by seconds with nobody at fault, which would bake a constant error into every correction. A follower instead stamps each incoming mark with its own `performance.now()` and extrapolates forward from there, so the only residual error is one-way network latency. `seq` is only ever compared with the previous mark's `seq` for equality (a freshness token, not a clock) - needed because the same mark arrives repeatedly, since any other field on the room document changing re-fires every client's listener, and re-stamping `receivedAt` each time would freeze the extrapolation at an increasingly old position.
+
+**Correction thresholds are deliberately loose** (1.2s uploads / 2.5s TikTok, with a 3s seek cooldown): a correction is a visible jump, so chasing tenths of a second would be worse to watch than being slightly behind. Marks older than 15s are treated as stale (host tab backgrounded, connection dropped) and simply ignored rather than chased.
+
+**Per-platform reality, and why it feeds straight into request (2).** An uploaded clip is a same-origin `<video>` - readable position, accurate seeks, real sync. A TikTok clip only reports its position when its Embed Player feels like emitting `onCurrentTime` and only seeks by `postMessage`, so it syncs loosely. An Instagram blockquote exposes neither, so synced rooms still move everyone onto the same Instagram clip at the same moment, but where they are *inside* it is each viewer's own business. That ordering is exactly the ordering request (2) asks for, so the settings copy says "Best with uploaded clips" rather than pretending otherwise.
+
+**A follower's feed is scroll-locked** (`.presenter-feed.following`: `overflow:hidden`, snapping off, `touch-action:none`). Two people steering is the one thing the mode exists to prevent. Scrolling is disabled for the *user*, not the code - `scrollTop` is still settable on an `overflow:hidden` box, which is how `followFeedTo` positions it. Followed jumps are `behavior:'auto'`, not smooth: this isn't the viewer's own gesture, and 400ms of animation is 400ms of a clip the rest of the room is already watching. An `#sync-badge` names the situation so a locked feed doesn't just read as broken.
+
+**Loop-back guard on the write path:** the `totc-active-clip-changed` listener is now gated on `feedIsHost`. A follower's feed moves *because* of that field, so letting it write back would put the room in a loop chasing itself.
+
+**What changed:**
+- `js/config.js` - `PLAYBACK_CAST`/`PLAYBACK_SYNCED`/`DEFAULT_PLAYBACK` and the five `PLAYBACK_SYNC_*` tunables.
+- `js/firebase.js` - `config.playback` on room creation, `setPlaybackMode`, and `setActiveEntry` gained an optional `playback` payload that rides in the same write.
+- `js/embeds.js` - `getPlaybackState` (conductor side), `applyPlaybackSync`/`correctDrift`/`stopPlaybackSync` (follower side).
+- `js/presenter.js` - split `bound` into `feedBound` (anything running a feed) and `hostBound` (host controls); `followFeedTo`; `publishPlayback`/`startConducting`/`stopConducting`; `buildEndCard`/`renderGrid` take `isHost` so a follower's end card carries a waiting note instead of the host's controls; `leaveCompiling`.
+- `js/guessing.js` - the "eyes on the big screen" placeholder never shows in synced playback (the guest is watching the clips on that very screen).
+- `js/game.js` - `playback` in `ctx`, and `presenter.leaveCompiling()` on any non-compiling phase.
+- `lobby.html` / `js/lobby.js` / `game.html` / `css/style.css` - the settings card, the guest labels, the sync badge, the follower feed lock, and the overlay treatment.
+
+**Latent bug found and fixed on the way:** hiding `#phase-compiling` does **not** stop the media inside it - the section is hidden, but a TikTok iframe or an uploaded `<video>` keeps right on playing. That has been true since Session 8 and was merely inaudible-ish on one host screen; with synced playback it would have been every phone in the room still playing through the voting phase. `leaveCompiling()` now explicitly silences the feed and drops both ends of the sync when the phase changes.
+
+**Guest panel as an overlay.** In synced playback `#guest-compiling-view` becomes a strip along the bottom of the feed (`.synced-overlay`) instead of a full page, and folds away entirely between clips. Two collisions showed up in screenshots and were fixed: the "Tap for sound" button moved to the top for followers and then had to clear the sync badge rather than sit level with it, and `.feed-caption` occupies exactly the space the panel now does - hidden on a following device, since the host's screen still carries it and in guess mode it says nothing but "hidden" anyway.
+
+### 2. Upload as the primary submission route
+
+Every slot now **opens on Upload**, the Upload tab **leads** the pair, and it carries a "Best" flag. Link is still one tap away and completely unchanged; picking it shows a standing nudge back with the reason attached ("Uploaded clips play back best - links depend on the platform's own player"), and the phase gained a lede ("Upload up to three clips from your camera roll. Only have a link? Switch any slot to Link."). The submit button now reads "Submit my clips" rather than "Submit my links", which stopped being accurate the moment uploads led.
+
+This is the same reasoning Session 15 flagged and left open: an uploaded clip is the only kind this app can autoplay reliably, unmute for real, and (as of this session) seek accurately enough to sync. `freshSlotState` falls back to link mode if `UPLOAD_ENABLED` is ever flipped off, since a slot would otherwise open on a control that never renders.
+
+### QA - 37 automated end-to-end checks, two players, real video, all passing
+
+**Harness note, and why it isn't the usual live-Firestore run.** This session's environment routes outbound HTTPS through an egress proxy that Chromium's requests to `firestore.googleapis.com` and `gstatic.com` do not survive (`ERR_CONNECTION_RESET`; `curl` through the same proxy is fine, so it is the browser's path specifically). The suite therefore runs both players as same-origin tabs in one browser context against a drop-in stand-in for `js/firebase.js` - identical exported surface and identical dot-path nested-write semantics, backed by `localStorage` plus a storage event - injected with `page.route`. Every module under test (`presenter`/`embeds`/`guessing`/`skipVote`/`lobby`/`game`) only ever sees that API, so what's exercised is the real code; what is *not* exercised is the four one-line `updateDoc` calls themselves. Real clips are real: a 20s video generated by recording a canvas in Chromium (Playwright's bundled ffmpeg is a stripped build with no `lavfi`), served over HTTP with byte-range support.
+
+Verified: both settings cards are host-only and hold their selections independently; playback defaults to `cast`; the guest lobby reflects the host's pick. In synced mode - the guest gets its own feed, scroll-locked, badged, with the panel as an overlay and a waiting note on its end card; the host publishes a mark; **both devices sit within 0.02s of each other after 9s of playback**; a follower deliberately knocked to 0.2s while the host was at 13.06s was **pulled back to 13.02s**; the follower tracks the host onto clip 2, onto the end card, and back; the overlay folds away with no clip active; the guess prompt and skip button both work over the feed; and every device's media stops (and the host stops conducting) when the phase ends. In cast mode - the guest still gets no feed and loads zero clips, no `playback` mark is ever written, and `activeEntryId` still drives the guess/skip machinery exactly as before. On the submission screen - every slot opens on Upload, Upload is first/selected/flagged, and switching to Link still works and shows the nudge.
+
+**Two bugs the suite caught.** The drift corrector originally gated on a finite `video.duration`, so a clip whose browser reports `Infinity` (no duration in metadata) would never sync at all - now gated on `readyState`, with the duration only used for the loop-overshoot guard where it's actually known. And the first failing run was the *harness*, not the app: the QA clip server didn't honour Range requests, so Chromium reported `video.seekable` as empty and no seek could land. Real hosts (Cloudinary included) serve ranges; a clip host that doesn't would degrade sync to "same clip, own position", which is worth knowing.
+
+**Not addressed, deliberately:** in synced playback every device plays its own audio, which in one physical room is a chorus rather than a chorus of one. The mode is aimed at rooms with no shared screen (or remote play), each device already has its own sound control, and muting followers by default would silently break the remote case - so this is left as-is and flagged rather than guessed at. Real-device testing remains the meaningful next check, as it has been since Session 8.

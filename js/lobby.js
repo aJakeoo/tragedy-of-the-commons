@@ -1,9 +1,21 @@
-import { subscribeToRoom, armDisconnectCleanup, cancelDisconnectCleanup, startRound, setPlayMode } from './firebase.js';
-import { GAME_NAME, DEFAULT_PLAY_MODE } from './config.js';
+import {
+  subscribeToRoom,
+  armDisconnectCleanup,
+  cancelDisconnectCleanup,
+  startRound,
+  setPlayMode,
+  setPlaybackMode,
+} from './firebase.js';
+import { GAME_NAME, DEFAULT_PLAY_MODE, DEFAULT_PLAYBACK } from './config.js';
 
 const MODE_LABELS = {
   funniest: 'Vote funniest',
   guess: 'Guess who submitted',
+};
+
+const PLAYBACK_LABELS = {
+  cast: 'On the host’s screen',
+  synced: 'On every device, in sync',
 };
 
 document.title = `Lobby - ${GAME_NAME}`;
@@ -95,29 +107,24 @@ unsubscribe = subscribeToRoom(code, room => {
   }
 
   const mode = room.config?.mode || DEFAULT_PLAY_MODE;
+  const playback = room.config?.playback || DEFAULT_PLAYBACK;
 
   document.getElementById('mode-controls').classList.toggle('hidden', !isHost);
+  document.getElementById('playback-controls').classList.toggle('hidden', !isHost);
   document.getElementById('host-controls').classList.toggle('hidden', !isHost);
   document.getElementById('guest-controls').classList.toggle('hidden', isHost);
 
   if (isHost) {
     if (!modeBound) {
       modeBound = true;
-      document.querySelectorAll('.mode-option').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const chosen = btn.dataset.mode;
-          // Optimistic: reflect the pick immediately rather than waiting on
-          // the round trip, same pattern as guessing.js's submitGuess - low
-          // stakes (lobby-only, freely overwritable) so a failed write just
-          // gets corrected by the next snapshot instead of surfacing an error.
-          document.querySelectorAll('.mode-option').forEach(b => b.classList.toggle('selected', b === btn));
-          setPlayMode(code, chosen).catch(() => {});
-        });
-      });
+      // Each settings card is selected from within its own container - both
+      // use .mode-option, so an unscoped query would let a play-mode pick
+      // clear the playback pick and vice versa.
+      bindSettingPicker('#mode-controls', 'mode', chosen => setPlayMode(code, chosen));
+      bindSettingPicker('#playback-controls', 'playback', chosen => setPlaybackMode(code, chosen));
     }
-    document.querySelectorAll('.mode-option').forEach(btn => {
-      btn.classList.toggle('selected', btn.dataset.mode === mode);
-    });
+    selectSetting('#mode-controls', 'mode', mode);
+    selectSetting('#playback-controls', 'playback', playback);
     const startBtn = document.getElementById('start-btn');
     if (!starting) {
       startBtn.disabled = playerIds.length < 1;
@@ -159,5 +166,28 @@ unsubscribe = subscribeToRoom(code, room => {
     };
   } else {
     document.getElementById('guest-mode-label').textContent = `Play mode: ${MODE_LABELS[mode] || mode}`;
+    document.getElementById('guest-playback-label').textContent =
+      `Playing: ${PLAYBACK_LABELS[playback] || playback}`;
   }
 });
+
+// The two pre-game settings cards behave identically - a row of exclusive
+// options writing one config field - so they share the wiring.
+function bindSettingPicker(containerSelector, datasetKey, write) {
+  document.querySelectorAll(`${containerSelector} .mode-option`).forEach(btn => {
+    btn.addEventListener('click', () => {
+      // Optimistic: reflect the pick immediately rather than waiting on the
+      // round trip, same pattern as guessing.js's submitGuess - low stakes
+      // (lobby-only, freely overwritable) so a failed write just gets
+      // corrected by the next snapshot instead of surfacing an error.
+      selectSetting(containerSelector, datasetKey, btn.dataset[datasetKey]);
+      write(btn.dataset[datasetKey]).catch(() => {});
+    });
+  });
+}
+
+function selectSetting(containerSelector, datasetKey, value) {
+  document.querySelectorAll(`${containerSelector} .mode-option`).forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset[datasetKey] === value);
+  });
+}

@@ -18,6 +18,7 @@ import {
   PERSIST_SCORES_ACROSS_ROUNDS,
   FIRESTORE_WRITE_TIMEOUT_MS,
   DEFAULT_PLAY_MODE,
+  DEFAULT_PLAYBACK,
 } from './config.js';
 
 // Firestore calls have been observed to intermittently hang with no thrown
@@ -90,6 +91,7 @@ export async function createRoom(code, hostPlayer) {
       mergeMultiplierPerContributor: MERGE_VOTE_MULTIPLIER_PER_CONTRIBUTOR,
       persistScores: PERSIST_SCORES_ACROSS_ROUNDS,
       mode: DEFAULT_PLAY_MODE,
+      playback: DEFAULT_PLAYBACK,
     },
     players: {
       [hostPlayer.id]: {
@@ -125,6 +127,14 @@ export async function joinRoom(code, player) {
 // setRevealAttribution.
 export async function setPlayMode(code, mode) {
   await withTimeout(updateDoc(roomRef(code), { 'config.mode': mode }));
+}
+
+// The room's other pre-game setting, same host-only/lobby-only lifecycle as
+// setPlayMode above: 'cast' (host's screen only, everyone watches that) or
+// 'synced' (the same feed on every device, following the host's position).
+// See PLAYBACK_* in js/config.js.
+export async function setPlaybackMode(code, playback) {
+  await withTimeout(updateDoc(roomRef(code), { 'config.playback': playback }));
 }
 
 // Firestore has no server-side "on disconnect" primitive like Realtime
@@ -195,10 +205,20 @@ export async function setRevealAttribution(code, round, revealed) {
 
 // Whichever clip the host's feed is currently snapped to - guests' devices
 // react to this via their normal subscribeToRoom listener to drive the
-// guess-the-submitter prompt (see js/guessing.js). null on the end card /
-// before the feed has snapped anywhere yet.
-export async function setActiveEntry(code, round, entryId) {
-  await withTimeout(updateDoc(roomRef(code), { [`rounds.${round}.activeEntryId`]: entryId ?? null }));
+// guess-the-submitter prompt (see js/guessing.js) and the vote-to-skip
+// tally. null on the end card / before the feed has snapped anywhere yet.
+//
+// `playback` is the synced-playback payload (config.playback === 'synced'
+// only): { entryId, position, playing, seq }, republished on a timer by the
+// host so every other device can follow along at the same point in the same
+// clip. It rides in the SAME write as activeEntryId deliberately - the two
+// describe the same fact, and separate writes could land out of order and
+// leave a follower's guess prompt naming a different clip than its feed is
+// showing. Omitted entirely in cast mode, where nothing reads it.
+export async function setActiveEntry(code, round, entryId, playback = null) {
+  const update = { [`rounds.${round}.activeEntryId`]: entryId ?? null };
+  if (playback) update[`rounds.${round}.playback`] = playback;
+  await withTimeout(updateDoc(roomRef(code), update));
 }
 
 // One field per (entry, guesser) - freely overwritable while that entry

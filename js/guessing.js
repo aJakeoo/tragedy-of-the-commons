@@ -1,4 +1,5 @@
 import { submitGuess } from './firebase.js';
+import { PLAYBACK_SYNCED } from './config.js';
 
 // Guest-facing "who submitted this one?" prompt, synced to whichever clip
 // the host's feed is currently snapped to (rounds.{round}.activeEntryId,
@@ -22,6 +23,12 @@ export function render(room, ctx) {
   const optionsWrap = document.getElementById('guess-options');
   const ownNote = document.getElementById('guess-own-note');
 
+  // In synced playback the guest is watching the clips on this very screen,
+  // so "eyes on the big screen" is both wrong and a waste of the strip of
+  // feed the panel is overlaying - the placeholder never shows there.
+  const synced = ctx.playback === PLAYBACK_SYNCED;
+  const showPlaceholder = shown => placeholder.classList.toggle('hidden', synced || !shown);
+
   if (ctx.isHost) {
     // presenter.js already hides #guest-compiling-view entirely for the
     // host; nothing to render here.
@@ -31,9 +38,9 @@ export function render(room, ctx) {
 
   if (ctx.mode !== 'guess') {
     // Vote-funniest rooms never run this mini-game - guests just watch the
-    // shared feed play out with no prompt of their own.
+    // clips play out with no prompt of their own.
     placeholderNote.textContent = "The host is playing this round's clips. Voting opens when the feed's done.";
-    placeholder.classList.remove('hidden');
+    showPlaceholder(true);
     panel.classList.add('hidden');
     renderedKey = null;
     return;
@@ -47,12 +54,12 @@ export function render(room, ctx) {
   const entry = activeEntryId ? submissions[activeEntryId] : null;
 
   if (!entry) {
-    placeholder.classList.remove('hidden');
+    showPlaceholder(true);
     panel.classList.add('hidden');
     renderedKey = null;
     return;
   }
-  placeholder.classList.add('hidden');
+  showPlaceholder(false);
   panel.classList.remove('hidden');
 
   const isContributor = (entry.contributors || []).some(c => c.id === ctx.playerId);
